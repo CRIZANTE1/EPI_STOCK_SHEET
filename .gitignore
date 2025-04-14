@@ -3,7 +3,7 @@
 
 # Credentials
 credentials/
-*.json
+*cred.json
 
 # Python
 __pycache__/
