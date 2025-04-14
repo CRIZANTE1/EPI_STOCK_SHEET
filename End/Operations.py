@@ -68,3 +68,48 @@ class SheetOperations:
         except Exception as e:
             logging.error(f"Erro ao adicionar dados: {e}", exc_info=True)
             st.error(f"Erro ao adicionar dados: {e}")
+
+    def add_user(self, user_data):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return
+        try:
+            logging.info(f"Tentando adicionar usuário: {user_data}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba_name = 'users'
+            if aba_name not in [sheet.title for sheet in archive.worksheets()]:
+                logging.error(f"A aba '{aba_name}' não existe no Google Sheets.")
+                st.error(f"A aba '{aba_name}' não foi encontrada na planilha.")
+                return
+            aba = archive.worksheet_by_title(aba_name)
+            aba.append_table(values=[user_data])
+            logging.info("Usuário adicionado com sucesso.")
+            st.success("Usuário adicionado com sucesso!")
+        except Exception as e:
+            logging.error(f"Erro ao adicionar usuário: {e}", exc_info=True)
+            st.error(f"Erro ao adicionar usuário: {e}")
+
+    def remove_user(self, user_name):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return
+        try:
+            logging.info(f"Tentando remover usuário: {user_name}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba_name = 'users'
+            if aba_name not in [sheet.title for sheet in archive.worksheets()]:
+                logging.error(f"A aba '{aba_name}' não existe no Google Sheets.")
+                st.error(f"A aba '{aba_name}' não foi encontrada na planilha.")
+                return
+            aba = archive.worksheet_by_title(aba_name)
+            data = aba.get_all_values()
+            
+            # Find the row to delete
+            for i, row in enumerate(data):
+                if user_name in row:  # Assuming username is a unique identifier
+                    aba.delete_rows(i+1)  # i+1 because sheet indices start at 1
+                    logging.info("Usuário removido com sucesso.")
+                    st.success("Usuário removido com sucesso!")
+                    return
+            st.error("Usuário não encontrado na aba 'users'.")
+        except Exception as e:
+            logging.error(f"Erro ao remover usuário: {e}", exc_info=True)
+            st.error(f"Erro ao remover usuário: {e}")

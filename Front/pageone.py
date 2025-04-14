@@ -193,7 +193,13 @@ def carregar_empregados(sheet_operations):
     
 #-----------------------------------------------------------------------------------------------------------------------    
 
-def entrance_exit_edit_delete(): 
+from auth import is_admin
+
+def entrance_exit_edit_delete():
+    if not is_admin():
+        st.error("Acesso negado. Apenas administradores podem realizar esta ação.")
+        return
+
     sheet_operations = SheetOperations()
     data = sheet_operations.carregar_dados()
     if data:

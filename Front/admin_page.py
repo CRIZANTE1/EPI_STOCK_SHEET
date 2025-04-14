@@ -88,129 +88,65 @@ def admin_page():
             alterar_senha()
         else:
             st.subheader("Gerenciamento de Usuários")
-            
-            # Verificar se o arquivo de banco de dados existe
-            users_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'users_db.json')
-            
-            if not os.path.exists(users_db_path):
-                st.warning("Banco de dados de usuários não encontrado!")
-                
-                # Criar banco de dados de exemplo
-                if st.button("Criar Banco de Dados de Usuários"):
-                    try:
-                        # Criar diretório de dados se não existir
-                        data_dir = os.path.dirname(users_db_path)
-                        os.makedirs(data_dir, exist_ok=True)
-                        
-                        # Criar banco de dados com usuário admin
-                        admin_password = "admin"  # Senha padrão para o admin
-                        hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                        
-                        users_db = {
-                            "admin": {
-                                "name": "Administrador",
-                                "email": "admin@example.com",
-                                "role": "admin",
-                                "password": hashed_password,
-                                "created_at": datetime.now().isoformat()
-                            }
-                        }
-                        
-                        with open(users_db_path, 'w') as file:
-                            json.dump(users_db, file, indent=4)
-                        
-                        st.success("Banco de dados de usuários criado com sucesso!")
-                        st.info("Usuário padrão: admin / Senha: admin")
-                    except Exception as e:
-                        st.error(f"Erro ao criar banco de dados: {str(e)}")
-                return
-                
-            # Carregar dados de usuários
-            try:
-                with open(users_db_path, 'r') as file:
-                    users_db = json.load(file)
-                
-                # Exibir lista de usuários
-                st.write(f"Total de usuários: {len(users_db)}")
-                
-                # Tabela de usuários
-                user_data = []
-                for username, user_info in users_db.items():
-                    user_data.append({
-                        "Usuário": username,
-                        "Nome": user_info.get("name", ""),
-                        "Email": user_info.get("email", ""),
-                        "Função": user_info.get("role", "usuário"),
-                        "Criado em": user_info.get("created_at", "")
-                    })
-                
+
+            from End.Operations import SheetOperations
+            sheet_operations = SheetOperations()
+            users_data = sheet_operations.carregar_dados_aba('users')
+
+            if users_data:
+                # Assuming the first row is the header
+                header = users_data[0]
+                user_data = [dict(zip(header, row)) for row in users_data[1:]]
+
                 if user_data:
-                    st.dataframe(pd.DataFrame(user_data))
+                    st.dataframe(user_data)
                 else:
                     st.info("Nenhum usuário encontrado.")
-                
-                # Seção para adicionar novo usuário
-                with st.expander("Adicionar Novo Usuário"):
-                    with st.form("form_novo_usuario"):
-                        novo_username = st.text_input("Nome de Usuário")
-                        novo_nome = st.text_input("Nome Completo")
-                        novo_email = st.text_input("Email")
-                        nova_role = st.selectbox("Função", ["usuário", "admin"])
-                        nova_senha = st.text_input("Senha", type="password")
-                        confirmar_senha = st.text_input("Confirmar Senha", type="password")
-                        
-                        submit_button = st.form_submit_button("Adicionar Usuário")
-                        
-                        if submit_button:
-                            if not novo_username or not novo_nome or not novo_email or not nova_senha or not confirmar_senha:
-                                st.error("Todos os campos são obrigatórios!")
-                            elif nova_senha != confirmar_senha:
-                                st.error("Senha e confirmação não correspondem!")
-                            elif novo_username in users_db:
-                                st.error("Nome de usuário já existe!")
-                            else:
-                                # Adicionar novo usuário
-                                hashed_password = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                                
-                                users_db[novo_username] = {
-                                    "name": novo_nome,
-                                    "email": novo_email,
-                                    "role": nova_role,
-                                    "password": hashed_password,
-                                    "created_at": datetime.now().isoformat()
-                                }
-                                
-                                # Salvar alterações
-                                with open(users_db_path, 'w') as file:
-                                    json.dump(users_db, file, indent=4)
-                                
-                                st.success(f"Usuário '{novo_username}' adicionado com sucesso!")
-                                st.rerun()  # Recarregar para atualizar a lista
-                
-                # Seção para remover usuário
-                with st.expander("Remover Usuário"):
-                    usuario_para_remover = st.selectbox("Selecione o usuário para remover", list(users_db.keys()))
-                    
-                    if st.button("Remover Usuário"):
-                        if usuario_para_remover in users_db:
-                            # Não permitir remover o último admin
-                            admins = [u for u, info in users_db.items() if info.get("role") == "admin"]
-                            if len(admins) <= 1 and usuario_para_remover in admins:
-                                st.error("Não é possível remover o último administrador do sistema!")
-                            else:
-                                # Remover usuário
-                                del users_db[usuario_para_remover]
-                                
-                                # Salvar alterações
-                                with open(users_db_path, 'w') as file:
-                                    json.dump(users_db, file, indent=4)
-                                
-                                st.success(f"Usuário '{usuario_para_remover}' removido com sucesso!")
-                                st.rerun()  # Recarregar para atualizar a lista
-                
-            except Exception as e:
-                st.error(f"Erro ao carregar dados de usuários: {str(e)}")
-    
+            else:
+                st.error("Não foi possível carregar os dados da aba 'users'.")
+
+            # Seção para adicionar novo usuário
+            with st.expander("Adicionar Novo Usuário"):
+                with st.form("form_novo_usuario"):
+                    novo_nome = st.text_input("Nome Completo")
+                    novo_email = st.text_input("Email")
+                    nova_role = st.selectbox("Função", ["usuário", "admin"])
+
+                    submit_button = st.form_submit_button("Adicionar Usuário")
+
+                    if submit_button:
+                        if not novo_nome or not novo_email:
+                            st.error("Todos os campos são obrigatórios!")
+                        else:
+                            # Adicionar novo usuário
+                            user_data = [novo_nome, novo_email, nova_role]
+                            sheet_operations.add_user(user_data)
+                            st.rerun()  # Recarregar para atualizar a lista
+
+            # Seção para remover usuário
+            with st.expander("Remover Usuário"):
+                # Get the list of usernames from the 'users' sheet
+                users_data = sheet_operations.carregar_dados_aba('users')
+                if users_data:
+                    header = users_data[0]
+                    try:
+                        name_index = header.index('Nome Completo')  # Assuming 'Nome Completo' column exists
+                    except ValueError:
+                        st.error("A coluna 'Nome Completo' não foi encontrada na aba 'users'.")
+                        name_index = None
+
+                    if name_index is not None:
+                        user_names = [row[name_index] for row in users_data[1:]]
+                        usuario_para_remover = st.selectbox("Selecione o usuário para remover", user_names)
+
+                        if st.button("Remover Usuário"):
+                            sheet_operations.remove_user(usuario_para_remover)
+                            st.rerun()  # Recarregar para atualizar a lista
+                    else:
+                        st.error("Não foi possível carregar a lista de usuários.")
+                else:
+                    st.error("Não foi possível carregar os dados da aba 'users'.")
+
     elif opcao_admin == "Configurações do Sistema":
         st.header("Configurações do Sistema")
         
@@ -254,4 +190,4 @@ def admin_page():
             "versão": "1.0.0",
             "modo_login": "OIDC (OpenID Connect)",
             "status": "Ativo"
-        }) 
+        })

@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import json
 import bcrypt
+from End.Operations import SheetOperations  # Import SheetOperations
 
 def is_oidc_available():
     """Verifica se o login OIDC está configurado e disponível"""
@@ -33,20 +34,31 @@ def get_user_role():
     try:
         if hasattr(st.experimental_user, 'role'):
             return st.experimental_user.role
-        return "user"
+        return "user"  # Default role if not specified
     except Exception:
-        return "user"
+        return "user"  # Default role if an error occurs
 
 def is_admin():
-    """Verifica se o usuário atual é um administrador"""
+    """Verifica se o usuário atual é um administrador consultando a aba 'users'."""
     try:
-        # Verifica se o usuário está logado e tem nome
-        if hasattr(st.experimental_user, 'name'):
-            user_name = st.experimental_user.name
-            # Verifica se o nome do usuário é "Cristian ferreira"
-            if user_name == "Cristian ferreira":
-                return True
-        return False
+        user_name = get_user_display_name()
+        sheet_operations = SheetOperations()
+        users_data = sheet_operations.carregar_dados_aba('users')
+
+        if users_data:
+            # Assuming the first row is the header
+            header = users_data[0]
+            try:
+                adm_name_index = header.index('adm_name')
+            except ValueError:
+                st.error("A coluna 'adm_name' não foi encontrada na aba 'users'.")
+                return False
+
+            admin_names = [row[adm_name_index] for row in users_data[1:]]  # Skip header row
+            return user_name in admin_names
+        else:
+            st.error("Não foi possível carregar os dados da aba 'users'.")
+            return False
     except Exception as e:
         st.error(f"Erro na verificação de admin: {str(e)}")
         return False
@@ -92,4 +104,4 @@ def alterar_senha_db(usuario, senha_atual, nova_senha):
         
     except Exception as e:
         st.error(f"Erro ao alterar senha: {str(e)}")
-        return False 
+        return False
