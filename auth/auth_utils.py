@@ -1,7 +1,4 @@
 import streamlit as st
-import os
-import json
-import bcrypt
 from End.Operations import SheetOperations  # Import SheetOperations
 
 def is_oidc_available():
@@ -61,47 +58,4 @@ def is_admin():
             return False
     except Exception as e:
         st.error(f"Erro na verificação de admin: {str(e)}")
-        return False
-
-def alterar_senha_db(usuario, senha_atual, nova_senha):
-    """Altera a senha do usuário no banco de dados"""
-    try:
-        # Caminho para o arquivo de banco de dados
-        users_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'users_db.json')
-        
-        # Verificar se o arquivo existe
-        if not os.path.exists(users_db_path):
-            st.error("Arquivo de banco de dados de usuários não encontrado!")
-            return False
-            
-        # Carregar dados dos usuários
-        with open(users_db_path, 'r') as file:
-            users_db = json.load(file)
-        
-        # Verificar se o usuário existe
-        if usuario not in users_db:
-            st.error("Usuário não encontrado no banco de dados!")
-            return False
-            
-        # Verificar senha atual
-        stored_hash = users_db[usuario]["password"]
-        if not bcrypt.checkpw(senha_atual.encode('utf-8'), stored_hash.encode('utf-8')):
-            st.error("Senha atual incorreta!")
-            return False
-            
-        # Gerar hash da nova senha
-        hashed_new_password = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        
-        # Atualizar senha no banco de dados
-        users_db[usuario]["password"] = hashed_new_password
-        
-        # Salvar alterações
-        with open(users_db_path, 'w') as file:
-            json.dump(users_db, file, indent=4)
-            
-        st.success("Senha alterada com sucesso!")
-        return True
-        
-    except Exception as e:
-        st.error(f"Erro ao alterar senha: {str(e)}")
         return False
