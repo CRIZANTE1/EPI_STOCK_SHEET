@@ -12,14 +12,7 @@ def configurar_pagina():
         layout="wide",
         initial_sidebar_state="expanded"
     )
-
-def sidebar():
-    with st.sidebar:
-        page = st.sidebar.selectbox("Selecione a página:", ["Página Inicial", "Administração"])
-        if page == "Página Inicial":  # Página inicial da aplicação
-            st.caption('EPI Stock Management')
-            
-        
+       
         
 def front_page():
     
