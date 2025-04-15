@@ -40,9 +40,6 @@ def main():
     else:
         front_page()
 
-    if 'gcp_service_account' in st.secrets:
-        credentials = pygsheets.authorize(service_account_env_var='gcp_service_account')
-        my_archive_google_sheets = st.secrets.get('GOOGLE_SHEETS_URL', '')
 
 if __name__ == "__main__":
     try:
