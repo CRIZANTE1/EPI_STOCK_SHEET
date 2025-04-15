@@ -124,46 +124,68 @@ def front_page():
 def get_closest_match_name(name, choices):
     # Retorna o nome mais aproximado usando a função `extractOne` do fuzzywuzzy
     closest_match, score = process.extractOne(name, choices)
-    return closest_match if score > 99 else name
+    # Retorna o nome mais aproximado usando a função `extractOne` do fuzzywuzzy
+    # Aumenta o limiar para maior precisão, se necessário, ou diminui se estiver agrupando demais
+    closest_match, score = process.extractOne(name, choices, score_cutoff=90) # Ajustado score_cutoff
+    return closest_match if score >= 90 else name # Retorna o original se a pontuação for baixa
 
 def calc_position(df):
-    # Garantir que a coluna 'quantity' seja numérica, forçando erros a se tornarem NaN
-    df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
-    
-    # Obter os nomes únicos dos EPIs e mapear para o nome mais próximo
-    unique_epi_names = df['epi_name'].unique()
-    name_mapping = {name: get_closest_match_name(name, unique_epi_names) for name in unique_epi_names}
-    df['epi_name'] = df['epi_name'].map(name_mapping)
-    
-    # Calcular o estoque atual (entrada - saída)
-    epi_entries = df[df['transaction_type'] == 'entrada'].groupby('epi_name')['quantity'].sum()
-    epi_exits = df[df['transaction_type'] == 'saida'].groupby('epi_name')['quantity'].sum()
-    
-    # Subtrair as saídas das entradas para obter o estoque
-    total_epi = epi_entries - epi_exits
-    
-    # Selecionar os 10 menores valores, incluindo negativos e zerados
-    total_epi = total_epi.sort_values().head(10)
-    
-    # Verifique se o total_epi está vazio ou contém valores válidos
-    if total_epi.empty:
-        st.warning("O cálculo do estoque resultou em nenhum valor ou todos os valores são iguais.")
+    # Fazer uma cópia para evitar SettingWithCopyWarning
+    df = df.copy()
+
+    # Garantir que a coluna 'quantity' seja numérica, preenchendo NaNs com 0
+    df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+
+    # Normalizar nomes dos EPIs usando uma nova coluna
+    unique_epi_names = df['epi_name'].dropna().unique() # Ignorar NaNs nos nomes
+    if len(unique_epi_names) == 0:
+        st.warning("Não há nomes de EPI válidos nos dados.")
         return
-    
+        
+    name_mapping = {name: get_closest_match_name(name, unique_epi_names) for name in unique_epi_names}
+    df['epi_name_normalized'] = df['epi_name'].map(name_mapping)
+
+    # Filtrar linhas onde a normalização falhou (raro, mas possível se 'epi_name' for NaN)
+    df.dropna(subset=['epi_name_normalized'], inplace=True)
+
+    # Calcular entradas e saídas usando o nome normalizado e preencher NaNs com 0
+    epi_entries = df[df['transaction_type'].str.lower() == 'entrada'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
+    epi_exits = df[df['transaction_type'].str.lower() == 'saida'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
+
+    # Usar reindex().add() para garantir que todos os EPIs sejam considerados
+    all_epis = epi_entries.index.union(epi_exits.index)
+    total_epi = epi_entries.reindex(all_epis, fill_value=0) - epi_exits.reindex(all_epis, fill_value=0)
+
+    # Verificar se há dados para plotar após o cálculo
+    if total_epi.empty or total_epi.isnull().all():
+        st.warning("Não há dados de estoque válidos para exibir no gráfico após o cálculo.")
+        return
+
+    # Selecionar os 10 menores valores, incluindo negativos e zerados
+    total_epi = total_epi.dropna().sort_values().head(10)
+
+    # Verificar novamente se total_epi está vazio após a filtragem e ordenação
+    if total_epi.empty:
+        st.warning("Após o cálculo e filtragem, não há dados de estoque para exibir nos 10 menores.")
+        return
+
     # Criar um dataframe para o gráfico
     total_epi_df = total_epi.reset_index()
-    total_epi_df.columns = ['EPI', 'Estoque']
-    
+    total_epi_df.columns = ['EPI', 'Estoque'] # Renomear colunas corretamente
+
     # Criar o gráfico com Altair
     chart = alt.Chart(total_epi_df).mark_bar().encode(
-        x=alt.X('EPI:N', title='Tipo de EPI'),
-        y=alt.Y('Estoque:Q', title='Estoque'),
-        color=alt.Color('Estoque:Q', scale=alt.Scale(scheme='redyellowgreen')),  # Alterar o esquema de cores
-        tooltip=['EPI', 'Estoque']
+        x=alt.X('EPI:N', title='Tipo de EPI', sort='-y'), # Ordenar barras pelo estoque decrescente
+        y=alt.Y('Estoque:Q', title='Estoque Atual'),
+        color=alt.Color('Estoque:Q', scale=alt.Scale(scheme='redyellowgreen')),
+        tooltip=[
+            alt.Tooltip('EPI', title='Nome do EPI'),
+            alt.Tooltip('Estoque', title='Quantidade em Estoque', format='.0f') # Formatar tooltip
+        ]
     ).properties(
-        title='Demonstrativo da posição do estoque atual (10 menores valores)'
+        title='Posição do Estoque Atual (10 Menores Valores)' # Título mais conciso
     )
-    
+
     # Exibir o gráfico
     st.altair_chart(chart, use_container_width=True)
     
@@ -278,3 +300,4 @@ def entrance_exit_edit_delete():
                 st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
         else:
             st.write("Não há entradas/saídas registradas no banco de dados.")
+
