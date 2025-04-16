@@ -48,22 +48,6 @@ def admin_page():
         3. Reinicie a aplicação para que as alterações tenham efeito
         """)
 
-        # Geração de cookie_secret
-        st.subheader("Gerar Novo Cookie Secret")
-        if st.button("Gerar Novo Cookie Secret"):
-            try:
-                # Importar função de geração de cookie_secret
-                from gerar_cookie_secret import gerar_cookie_secret
-
-                # Gerar novo cookie_secret
-                novo_cookie_secret = gerar_cookie_secret()
-
-                st.success("Novo cookie_secret gerado com sucesso!")
-                st.code(f"cookie_secret = \"{novo_cookie_secret}\"")
-                st.info("Copie este valor para o arquivo .streamlit/secrets.toml")
-            except Exception as e:
-                st.error(f"Erro ao gerar cookie_secret: {str(e)}")
-
         # Status do sistema
         st.subheader("Status do Sistema")
         st.json({
