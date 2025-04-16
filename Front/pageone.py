@@ -4,7 +4,9 @@ from End.Operations import SheetOperations
 from datetime import datetime
 from fuzzywuzzy import process
 import altair as alt
+import plotly.express as px
 from auth import is_admin
+
 
 def configurar_pagina():
     st.set_page_config(
@@ -100,6 +102,10 @@ def front_page():
     st.write("### Análise do Estoque")
     calc_position(df)
 
+    # Adicionando a seção de análise de uso de EPI
+    st.write("### Insights de Uso de EPI")
+    analyze_epi_usage_minimalist(df)
+
 #-----------------------------------------------------------------------------------------------------------------------
     """
     A função `calc_position` calcula a posição atual do estoque de itens com base nos dados de entrada e
@@ -131,7 +137,7 @@ def calc_position(df):
     df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
 
     # Normalizar nomes dos EPIs usando uma nova coluna
-    unique_epi_names = df['epi_name'].dropna().unique() # Ignorar NaNs nos nomes
+    unique_epi_names = df['epi_name'].dropna().unique()  # Ignorar NaNs nos nomes
     if len(unique_epi_names) == 0:
         st.warning("Não há nomes de EPI válidos nos dados.")
         return
@@ -185,7 +191,7 @@ def calc_position(df):
     
 
 #-----------------------------------------------------------------------------------------------------------------------
-"""
+    """
     Esta função Python carrega dados de empregados de uma planilha especificada e retorna uma lista de
     nomes de empregados, exibindo uma mensagem de erro se os dados não puderem ser carregados.
     
@@ -304,5 +310,228 @@ def entrance_exit_edit_delete():
         else:
             st.write("Não há entradas/saídas registradas no banco de dados.")
 
+
+#-----------------------------------------------------------------------------------------------------------------------
+def analyze_epi_usage_minimalist(df: pd.DataFrame, short_interval_days: int = 7):
+    """
+    Realiza uma análise do uso de EPIs com apresentação minimalista.
+    Inclui:
+    1. Top 3 EPIs mais requisitados (Lista de Texto).
+    2. Top 3 Usuários que mais requisitaram (Lista de Texto).
+    3. Análise cruzada: EPIs mais requisitados pelos top usuários (Tabelas Simples).
+    4. Análise de frequência: Identificação de requisições frequentes (Texto/Tabela).
+
+    Args:
+        df (pd.DataFrame): DataFrame com colunas: 'date', 'transaction_type',
+                           'epi_name', 'quantity', 'requester'.
+        short_interval_days (int): Limite em dias para requisições frequentes.
+
+    Returns:
+        None: Exibe os resultados na interface do Streamlit.
+
+    Raises:
+        TypeError: Se df não for um DataFrame.
+        ValueError: Se colunas essenciais faltarem ou dados forem inválidos.
+    """
+    # --- 1. Validação de Entrada ---
+    if not isinstance(df, pd.DataFrame):
+        st.error("Erro: O input fornecido não é um DataFrame do Pandas.")
+        raise TypeError("O input deve ser um DataFrame do Pandas.")
+        # No return needed after raise
+
+    required_columns = ['date', 'transaction_type', 'epi_name', 'quantity', 'requester']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        st.error(f"Erro: Colunas essenciais ausentes: {', '.join(missing_columns)}")
+        raise ValueError(f"Colunas ausentes: {', '.join(missing_columns)}")
+        # No return needed after raise
+
+    # --- 2. Pré-processamento e Limpeza ---
+    try:
+        df_processed = df.copy()
+        # Padronizar tipo de transação
+        df_processed['transaction_type'] = df_processed['transaction_type'].fillna('').str.lower().str.strip()
+        df_saidas = df_processed[df_processed['transaction_type'] == 'saída'].copy()
+
+        if df_saidas.empty:
+            st.info("Nenhuma transação do tipo 'saída' encontrada para análise.")
+            return
+
+        # Limpeza e conversão de 'quantity'
+        original_rows = len(df_saidas)
+        df_saidas['quantity'] = pd.to_numeric(df_saidas['quantity'], errors='coerce')
+        df_saidas.dropna(subset=['quantity'], inplace=True)
+        removed_quantity = original_rows - len(df_saidas)
+        if removed_quantity > 0:
+            st.warning(f"Atenção: {removed_quantity} linha(s) com 'quantity' inválida ou vazia foram removidas.")
+
+        # Tentar converter 'quantity' para int se todos forem inteiros
+        if not df_saidas.empty and pd.api.types.is_float_dtype(df_saidas['quantity']):
+             if (df_saidas['quantity'] % 1 == 0).all():
+                 try:
+                     df_saidas['quantity'] = df_saidas['quantity'].astype(int)
+                 except ValueError:
+                     pass # Mantém como float se a conversão falhar por algum motivo
+
+        # Limpeza e conversão de 'date'
+        original_rows = len(df_saidas)
+        df_saidas['date'] = pd.to_datetime(df_saidas['date'], errors='coerce')
+        df_saidas.dropna(subset=['date'], inplace=True)
+        removed_date = original_rows - len(df_saidas)
+        if removed_date > 0:
+            st.warning(f"Atenção: {removed_date} linha(s) com 'date' inválida ou vazia foram removidas.")
+
+        if df_saidas.empty:
+            st.info("Nenhum dado válido de 'saída' restante após limpeza.")
+            return
+
+        # Limpeza de texto (remover espaços extras)
+        df_saidas['epi_name'] = df_saidas['epi_name'].fillna('').str.strip()
+        df_saidas['requester'] = df_saidas['requester'].fillna('').str.strip()
+        # Remover linhas onde EPI ou requisitante ficou vazio após strip
+        df_saidas = df_saidas[(df_saidas['epi_name'] != '') & (df_saidas['requester'] != '')]
+
+        if df_saidas.empty:
+            st.info("Nenhum dado válido com EPI e Requisitante preenchidos após limpeza.")
+            return
+
+    except Exception as e:
+        st.error(f"Erro durante o pré-processamento: {e}")
+        return # Impede a continuação se houver erro aqui
+
+    # --- 3. Análises e Apresentação Minimalista ---
+    st.header("Análise de Utilização de EPIs (Saídas)")
+
+    # 3.1. Top EPIs (Texto)
+    st.subheader("Top 3 EPIs Utilizados")
+    try:
+        top_epis_series = df_saidas.groupby('epi_name')['quantity'].sum().sort_values(ascending=False).head(3)
+        if not top_epis_series.empty:
+            # st.markdown("**Quantidade Total Requisitada:**") # Subtítulo opcional
+            for i, (epi, quantity) in enumerate(top_epis_series.items(), 1):
+                 # Format quantity as int if it's a whole number
+                 qty_str = f"{int(quantity):,}" if quantity == int(quantity) else f"{quantity:,.2f}"
+                 st.text(f"{i}. {epi}: {qty_str}")
+        else:
+            st.info("Sem dados para listar top EPIs.")
+    except Exception as e:
+        st.error(f"Erro na análise de top EPIs: {e}")
+
+    # 3.2. Top Usuários (Texto)
+    st.subheader("Top 3 Usuários (Requisições)")
+    try:
+        # Agrupar por 'requester' e somar 'quantity'
+        top_users_series = df_saidas.groupby('requester')['quantity'].sum().sort_values(ascending=False).head(3)
+        if not top_users_series.empty:
+            # st.markdown("**Quantidade Total Requisitada:**") # Subtítulo opcional
+            top_users_list = top_users_series.index.tolist()
+            for i, (user, quantity) in enumerate(top_users_series.items(), 1):
+                 qty_str = f"{int(quantity):,}" if quantity == int(quantity) else f"{quantity:,.2f}"
+                 st.text(f"{i}. {user}: {qty_str}")
+        else:
+            st.info("Sem dados para listar top usuários.")
+            top_users_list = []
+    except Exception as e:
+        st.error(f"Erro na análise de top usuários: {e}")
+        top_users_list = []
+
+    # 3.3. Análise Cruzada: EPIs por Top Usuário (Tabelas Simples)
+    st.subheader("EPIs por Top Usuário")
+    if not top_users_list:
+        st.info("Análise não disponível (sem top usuários identificados).")
+    else:
+        try:
+            df_top_users_data = df_saidas[df_saidas['requester'].isin(top_users_list)]
+            if df_top_users_data.empty:
+                 st.info("Não há dados de requisição para os top usuários.")
+            else:
+                # Calcular uso por EPI para os top usuários
+                user_epi_usage = df_top_users_data.groupby(['requester', 'epi_name'])['quantity'].sum().reset_index()
+                # Iterar sobre a lista ordenada de top usuários
+                for user in top_users_list:
+                    st.markdown(f"**{user}**") # Nome do usuário em negrito
+                    user_data = user_epi_usage[user_epi_usage['requester'] == user].sort_values(by='quantity', ascending=False).head(5) # Top 5 EPIs por usuário
+                    if not user_data.empty:
+                        user_data_display = user_data[['epi_name', 'quantity']].rename(columns={'epi_name': 'EPI', 'quantity': 'Quantidade'})
+                        # Formatar quantidade na tabela
+                        user_data_display['Quantidade'] = user_data_display['Quantidade'].apply(
+                            lambda x: f"{int(x):,}" if x == int(x) else f"{x:,.2f}"
+                        )
+                        # Usar st.table para visual simples e estático
+                        st.table(user_data_display.set_index('EPI'))
+                    else:
+                        # Mensagem mais concisa se não houver dados para este usuário
+                        st.caption("Nenhum EPI registrado para este usuário.")
+                    # Remover linha divisória para um look mais limpo st.markdown("---")
+
+        except Exception as e:
+            st.error(f"Erro na análise cruzada usuário x EPI: {e}")
+
+    # 3.4. Análise de Frequência (Texto e Tabela opcional)
+    st.subheader(f"⏱️ Requisições Frequentes (Intervalo ≤ {short_interval_days} dias)")
+    try:
+        if len(df_saidas) < 2:
+             st.info("Dados insuficientes para análise de frequência.")
+             return
+
+        df_sorted = df_saidas.sort_values(by=['requester', 'epi_name', 'date']).copy()
+        # Calcular diferença apenas para o mesmo usuário e mesmo EPI
+        df_sorted['time_since_prev_request'] = df_sorted.groupby(['requester', 'epi_name'])['date'].diff()
+        threshold_timedelta = pd.Timedelta(days=short_interval_days)
+
+        # Filtrar requisições frequentes (não nulas e dentro do threshold)
+        frequent_requests = df_sorted[
+            df_sorted['time_since_prev_request'].notna() &
+            (df_sorted['time_since_prev_request'] <= threshold_timedelta)
+        ].copy()
+
+        if not frequent_requests.empty:
+            count = len(frequent_requests)
+            st.warning(f"Identificada(s) {count} requisição(ões) feita(s) em intervalo curto.")
+
+            # Resumo textual simples
+            st.markdown("**Resumo:**")
+            top_freq_users = frequent_requests['requester'].value_counts().head(3)
+            top_freq_epis = frequent_requests['epi_name'].value_counts().head(3)
+
+            if not top_freq_users.empty:
+                st.text("Usuários mais envolvidos:")
+                for user, num in top_freq_users.items():
+                    st.text(f"- {user} ({num} ocorrência(s))")
+
+            if not top_freq_epis.empty:
+                st.text("EPIs mais envolvidos:")
+                for epi, num in top_freq_epis.items():
+                    st.text(f"- {epi} ({num} ocorrência(s))")
+
+            # Detalhes em um expander (mantendo dataframe pela praticidade com tabelas longas)
+            with st.expander("Ver detalhes das requisições frequentes"):
+                frequent_requests_display = frequent_requests[[
+                    'date', 'requester', 'epi_name', 'quantity', 'time_since_prev_request'
+                ]].rename(columns={
+                    'date': 'Data',
+                    'requester': 'Requisitante',
+                    'epi_name': 'EPI',
+                    'quantity': 'Qtd.',
+                    'time_since_prev_request': 'Intervalo'
+                }).sort_values(by='Data', ascending=False) # Ordenar por data recente
+
+                # Formatar colunas para melhor leitura
+                frequent_requests_display['Data'] = frequent_requests_display['Data'].dt.strftime('%d/%m/%Y')
+                frequent_requests_display['Intervalo'] = frequent_requests_display['Intervalo'].apply(lambda x: f"{x.days} dias")
+                frequent_requests_display['Qtd.'] = frequent_requests_display['Qtd.'].apply(
+                    lambda x: f"{int(x):,}" if x == int(x) else f"{x:,.2f}"
+                )
+
+                # Usar dataframe aqui ainda é prático para dados tabulares potencialmente longos
+                st.dataframe(frequent_requests_display, hide_index=True, use_container_width=True)
+
+        else:
+            st.success(f"Nenhuma requisição frequente identificada (intervalo ≤ {short_interval_days} dias).")
+
+    except KeyError as e:
+         st.error(f"Erro na análise de frequência: Coluna necessária não encontrada ({e}). Verifique os nomes das colunas.")
+    except Exception as e:
+        st.error(f"Erro inesperado na análise de frequência: {e}")
 
 
