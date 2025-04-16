@@ -4,9 +4,15 @@ import logging
 import random
 from API.conection import connect_sheet
 
+
 class SheetOperations:
     
     def __init__(self):
+        """
+        O código define uma classe com métodos para conectar-se a um documento Google Sheets, carregar dados de
+        uma planilha específica, adicionar novos dados com um ID único, editar dados existentes com base no ID
+        e excluir dados com base no ID.
+        """
         self.credentials, self.my_archive_google_sheets = connect_sheet()
         if not self.credentials or not self.my_archive_google_sheets:
             logging.error("Credenciais ou URL do Google Sheets inválidos.")
@@ -69,7 +75,69 @@ class SheetOperations:
             logging.error(f"Erro ao adicionar dados: {e}", exc_info=True)
             st.error(f"Erro ao adicionar dados: {e}")
 
+    def editar_dados(self, id, updated_data):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return False
+        try:
+            logging.info(f"Tentando editar dados do ID {id}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('control_stock')
+            data = aba.get_all_values()
+            
+            # Procurar a linha com o ID correspondente
+            for i, row in enumerate(data):
+                if row[0] == str(id):  # ID está na primeira coluna
+                    # Atualizar a linha com os novos dados, mantendo o ID original
+                    updated_row = [str(id)] + updated_data
+                    aba.update_row(i + 1, updated_row)  # +1 porque as linhas começam em 1
+                    logging.info("Dados editados com sucesso.")
+                    return True
+                    
+            logging.error(f"ID {id} não encontrado.")
+            return False
+            
+        except Exception as e:
+            logging.error(f"Erro ao editar dados: {e}", exc_info=True)
+            return False
+
+    def excluir_dados(self, id):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return False
+        try:
+            logging.info(f"Tentando excluir dados do ID {id}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('control_stock')
+            data = aba.get_all_values()
+            
+            # Procurar a linha com o ID correspondente
+            for i, row in enumerate(data):
+                if row[0] == str(id):  # ID está na primeira coluna
+                    aba.delete_rows(i + 1)  # +1 porque as linhas começam em 1
+                    logging.info("Dados excluídos com sucesso.")
+                    return True
+                    
+            logging.error(f"ID {id} não encontrado.")
+            return False
+            
+        except Exception as e:
+            logging.error(f"Erro ao excluir dados: {e}", exc_info=True)
+            return False
+        
+# Em implemação -----------------------------------------------------------------------------
     def add_user(self, user_data):
+        
+        """
+        O código Python fornecido define métodos para adicionar e remover usuários de um documento Google Sheets,
+        tratando erros e mensagens de log de acordo.
+
+        :param user_data: O parâmetro `user_data` provavelmente contém informações sobre um usuário que você deseja
+        adicionar a um documento Google Sheets. Essas informações podem incluir detalhes como o nome do usuário,
+        e-mail, função ou quaisquer outros dados relevantes que você deseja armazenar na planilha 'users' dentro do
+        Google Sheets especificado.
+        :return: Tanto nos métodos `add_user` quanto `remove_user`, se as condições `if not
+        self.credentials or not self.my_archive_google_sheets` forem atendidas, os métodos retornarão
+        sem executar nenhuma ação adicional.
+        """
         if not self.credentials or not self.my_archive_google_sheets:
             return
         try:
@@ -113,3 +181,5 @@ class SheetOperations:
         except Exception as e:
             logging.error(f"Erro ao remover usuário: {e}", exc_info=True)
             st.error(f"Erro ao remover usuário: {e}")
+            
+# Em implemação -----------------------------------------------------------------------------
