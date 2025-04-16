@@ -7,7 +7,7 @@ from auth import (
     show_logout_button,
     is_admin
 )
-import pygsheets
+
 
 def main():
     """Função principal do aplicativo"""
