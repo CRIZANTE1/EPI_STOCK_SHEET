@@ -4,6 +4,7 @@ from End.Operations import SheetOperations
 from datetime import datetime
 from fuzzywuzzy import process
 import altair as alt
+from auth import is_admin
 
 def configurar_pagina():
     st.set_page_config(
@@ -208,9 +209,16 @@ def carregar_empregados(sheet_operations):
     
 #-----------------------------------------------------------------------------------------------------------------------    
 
-from auth import is_admin
-
 def entrance_exit_edit_delete():
+    """
+    Esta função Python gerencia a inserção, edição e exclusão de registros de entrada e saída em uma planilha,
+    com verificações de validação e campos de entrada para o usuário.
+    :return: A função `entrance_exit_edit_delete()` retorna mensagens diferentes com base nas condições
+    atendidas durante sua execução.  Os possíveis valores retornados são: mensagens de sucesso, erro ou
+    avisos, dependendo se a operação foi bem sucedida, se houve algum erro durante a operação ou se
+    algum campo obrigatório não foi preenchido.  A função também pode não retornar explicitamente nada
+    (None) em alguns casos.
+    """
     if not is_admin():
         st.error("Acesso negado. Apenas administradores podem realizar esta ação.")
         return
@@ -228,69 +236,73 @@ def entrance_exit_edit_delete():
         st.error("A planilha não contém todas as colunas necessárias.")
         return
 
-    # Verificar a presença da coluna 'Date' e renomeá-la se necessário
-    if 'date' in df.columns:
-        df.rename(columns={'date': 'Date'}, inplace=True)
-
     all_entrance_epi_names = df[df['transaction_type'] == 'entrada']['epi_name'].unique()
     empregados = carregar_empregados(sheet_operations)
 
-    with st.expander("Inserir novo registro"):  # Expander para inserção
+    with st.expander("Inserir novo registro"):
         requester = None
-        transaction_type = st.selectbox("Tipo de transação:", ["entrada", "saída"])
+        transaction_type = st.selectbox("Tipo de transação:", ["entrada", "saída"], key="transaction_type_add")
 
         if transaction_type == "entrada":
-            epi_name = st.text_input("Nome do EPI:", "")
+            epi_name = st.text_input("Nome do EPI:", "", key="epi_name_add")
         elif transaction_type == "saída":
             if len(all_entrance_epi_names) > 0:
-                epi_name = st.selectbox("Nome do EPI:", all_entrance_epi_names)
+                epi_name = st.selectbox("Nome do EPI:", all_entrance_epi_names, key="epi_name_select_add")
                 ca_value = df[df['epi_name'] == epi_name]['CA'].values[0]
-                st.text_input("CA:", value=ca_value, disabled=True)
+                st.text_input("CA:", value=ca_value, disabled=True, key="ca_display_add")
             else:
                 st.write("Não há entradas registradas no banco de dados.")
 
-        quantity = st.number_input("Quantidade:", min_value=0, step=1)
-        value = st.number_input("Valor:", min_value=0.0, step=0.01) if transaction_type == "entrada" else 0
-        ca = st.text_input("CA:", "") if transaction_type == "entrada" else ca_value
+        quantity = st.number_input("Quantidade:", min_value=0, step=1, key="quantity_add")
+        value = st.number_input("Valor:", min_value=0.0, step=0.01, key="value_add") if transaction_type == "entrada" else 0
+        ca = st.text_input("CA:", "", key="ca_add") if transaction_type == "entrada" else ca_value
         if transaction_type == "saída":
-            requester = st.selectbox("Solicitante:", empregados)
-            exit_date = st.date_input("Data da saída:")
+            requester = st.selectbox("Solicitante:", empregados, key="requester_add")
+            exit_date = st.date_input("Data da saída:", key="date_add")
         
-        if st.button("Adicionar"):
+        if st.button("Adicionar", key="btn_add"):
             if epi_name and quantity:
                 new_data = [epi_name, quantity, transaction_type, str(datetime.now().date()), value, requester, ca]
                 sheet_operations.adc_dados(new_data)
+                st.rerun()
             else:
                 st.warning("Por favor, preencha todos os campos.")
 
-    with st.expander("Editar registro existente"):  # Expander para edição
+    with st.expander("Editar registro existente"):
         all_ids = df['id'].tolist()
-        selected_id = st.selectbox("Selecione a linha que será editada:", all_ids)
+        selected_id = st.selectbox("Selecione a linha que será editada:", all_ids, key="id_edit")
 
         if selected_id:
-            st.session_state.id = selected_id
+            selected_row = df[df['id'] == selected_id].iloc[0]
+            epi_name = st.text_input("Nome do EPI:", value=selected_row["epi_name"], key="epi_name_edit")
+            quantity = st.number_input("Quantidade:", value=int(selected_row["quantity"]), key="quantity_edit")
+            value = st.number_input("Valor:", value=float(selected_row["value"]), key="value_edit")
+            transaction_type = st.selectbox("Tipo de transação:", ["entrada", "saída"], 
+                                         index=0 if selected_row["transaction_type"] == "entrada" else 1,
+                                         key="transaction_type_edit")
 
-        if st.session_state.get('id'):
-            id = st.session_state.id
-            selected_row = df[df['id'] == id].iloc[0]
-            epi_name = st.text_input("Nome do EPI:", value=selected_row["epi_name"])
-            quantity = st.number_input("Quantidade:", value=int(selected_row["quantity"]))
-            value = st.number_input("Valor:", value=float(selected_row["value"]))
-            transaction_type = st.text_input("Tipo de transação:", value=selected_row["transaction_type"])
+            if st.button("Editar", key="btn_edit"):
+                updated_data = [epi_name, quantity, transaction_type, selected_row["date"], value, selected_row["requester"], selected_row["CA"]]
+                if sheet_operations.editar_dados(selected_id, updated_data):
+                    st.success("EPI editado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao editar o registro.")
 
-            if st.button("Editar"):
-                df.loc[df['id'] == id, ["epi_name", "quantity", "value", "transaction_type"]] = [epi_name, quantity, value, transaction_type]
-                st.success("EPI editado com sucesso!")
-                del st.session_state['id']
-
-    with st.expander("Excluir registro existente"):  # Expander para exclusão
+    with st.expander("Excluir registro existente"):
         all_epi_ids = df['id'].tolist()
-
         if all_epi_ids:
-            selected_id = st.selectbox("Com Cautela! Selecione o ID da entrada ou saída para excluir:", all_epi_ids)
-            if st.button("Excluir"):
-                df = df[df['id'] != selected_id]
-                st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
+            selected_id = st.selectbox("Com Cautela! Selecione o ID da entrada ou saída para excluir:", 
+                                     all_epi_ids, 
+                                     key="id_delete")
+            if st.button("Excluir", key="btn_delete"):
+                if sheet_operations.excluir_dados(selected_id):
+                    st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao excluir o registro.")
         else:
             st.write("Não há entradas/saídas registradas no banco de dados.")
+
+
 
