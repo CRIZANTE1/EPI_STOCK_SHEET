@@ -1,6 +1,7 @@
 import streamlit as st
 from Front.pageone import front_page, configurar_pagina
 from Front.admin_page import admin_page
+from Front.analytics_page import analytics_page
 from auth import (
     show_login_page,
     show_user_header,
