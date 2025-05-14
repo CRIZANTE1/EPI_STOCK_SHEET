@@ -169,8 +169,7 @@ def calc_position(df):
     critical_stock = total_epi_sorted[total_epi_sorted <= 0]
     if not critical_stock.empty:
         st.error("### EPIs com Estoque Crítico ⚠️")
-        critical_df = pd.DataFrame({'Estoque': critical_stock})
-        st.bar_chart(critical_df, use_container_width=True)
+               
         
         # Mostrar lista detalhada dos itens críticos
         st.write("Detalhamento dos itens críticos:")
@@ -184,16 +183,6 @@ def calc_position(df):
         normal_df = pd.DataFrame({'Estoque': normal_stock})
         st.bar_chart(normal_df, use_container_width=True)
         
-        # Adicionar uma tabela com os valores exatos
-        st.write("Detalhamento do estoque:")
-        stock_details = pd.DataFrame({
-            'EPI': normal_stock.index,
-            'Quantidade': normal_stock.values
-        }).sort_values('Quantidade', ascending=False)
-        
-        st.dataframe(stock_details.style.format({'Quantidade': '{:.0f}'}), use_container_width=True)
-    else:
-        st.warning("Não há itens com estoque positivo.")
 
 #-----------------------------------------------------------------------------------------------------------------------
     """
@@ -592,6 +581,8 @@ def analyze_epi_usage_minimalist(df: pd.DataFrame, short_interval_days: int = 7)
          st.error(f"Erro na análise de frequência: Coluna necessária não encontrada ({e}). Verifique os nomes das colunas.")
     except Exception as e:
         st.error(f"Erro inesperado na análise de frequência: {e}")
+
+
 
 
 
