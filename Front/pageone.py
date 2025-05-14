@@ -162,34 +162,38 @@ def calc_position(df):
         st.warning("Não há dados de estoque válidos para exibir no gráfico após o cálculo.")
         return
 
-    # Selecionar os 10 menores valores, incluindo negativos e zerados
-    total_epi = total_epi.dropna().sort_values().head(10)
-
-    # Verificar novamente se total_epi está vazio após a filtragem e ordenação
-    if total_epi.empty:
-        st.warning("Após o cálculo e filtragem, não há dados de estoque para exibir nos 10 menores.")
-        return
-
-    # Criar um dataframe para o gráfico
-    total_epi_df = total_epi.reset_index()
-    total_epi_df.columns = ['EPI', 'Estoque'] # Renomear colunas corretamente
-
-    # Criar o gráfico com Altair
-    chart = alt.Chart(total_epi_df).mark_bar().encode(
-        x=alt.X('EPI:N', title='Tipo de EPI', sort='-y'), # Ordenar barras pelo estoque decrescente
-        y=alt.Y('Estoque:Q', title='Estoque Atual'),
-        color=alt.Color('Estoque:Q', scale=alt.Scale(scheme='redyellowgreen')),
-        tooltip=[
-            alt.Tooltip('EPI', title='Nome do EPI'),
-            alt.Tooltip('Estoque', title='Quantidade em Estoque', format='.0f') # Formatar tooltip
-        ]
-    ).properties(
-        title='Posição do Estoque Atual (10 Menores Valores)' # Título mais conciso
-    )
-
-    # Exibir o gráfico
-    st.altair_chart(chart, use_container_width=True)
+    # Criar dois DataFrames separados: um para itens com estoque baixo/crítico e outro para o resto
+    total_epi_sorted = total_epi.sort_values()
     
+    # Identificar itens com estoque crítico (negativos ou zero)
+    critical_stock = total_epi_sorted[total_epi_sorted <= 0]
+    if not critical_stock.empty:
+        st.error("### EPIs com Estoque Crítico ⚠️")
+        critical_df = pd.DataFrame({'Estoque': critical_stock})
+        st.bar_chart(critical_df, use_container_width=True)
+        
+        # Mostrar lista detalhada dos itens críticos
+        st.write("Detalhamento dos itens críticos:")
+        for epi, qty in critical_stock.items():
+            st.write(f"- {epi}: {int(qty) if qty == int(qty) else qty:.2f}")
+    
+    # Criar DataFrame com todos os itens em estoque (positivos)
+    normal_stock = total_epi_sorted[total_epi_sorted > 0]
+    if not normal_stock.empty:
+        st.write("### Posição Atual do Estoque 📊")
+        normal_df = pd.DataFrame({'Estoque': normal_stock})
+        st.bar_chart(normal_df, use_container_width=True)
+        
+        # Adicionar uma tabela com os valores exatos
+        st.write("Detalhamento do estoque:")
+        stock_details = pd.DataFrame({
+            'EPI': normal_stock.index,
+            'Quantidade': normal_stock.values
+        }).sort_values('Quantidade', ascending=False)
+        
+        st.dataframe(stock_details.style.format({'Quantidade': '{:.0f}'}), use_container_width=True)
+    else:
+        st.warning("Não há itens com estoque positivo.")
 
 #-----------------------------------------------------------------------------------------------------------------------
     """
@@ -588,5 +592,8 @@ def analyze_epi_usage_minimalist(df: pd.DataFrame, short_interval_days: int = 7)
          st.error(f"Erro na análise de frequência: Coluna necessária não encontrada ({e}). Verifique os nomes das colunas.")
     except Exception as e:
         st.error(f"Erro inesperado na análise de frequência: {e}")
+
+
+
 
 
