@@ -20,6 +20,15 @@ class SheetOperations:
     def carregar_dados(self):
         return self.carregar_dados_aba('control_stock')
     
+    def carregar_dados_funcionarios(self):
+        """
+        Carrega os dados dos funcionários da aba 'funcionarios' do Google Sheets.
+        
+        Returns:
+            list: Lista com os dados dos funcionários, onde o primeiro item são os cabeçalhos
+                 e os demais são os dados de cada funcionário.
+        """
+        return self.carregar_dados_aba('funcionarios')
 
     def carregar_dados_aba(self, aba_name):
         if not self.credentials or not self.my_archive_google_sheets:
@@ -182,4 +191,3 @@ class SheetOperations:
             logging.error(f"Erro ao remover usuário: {e}", exc_info=True)
             st.error(f"Erro ao remover usuário: {e}")
             
-# Em implemação -----------------------------------------------------------------------------
