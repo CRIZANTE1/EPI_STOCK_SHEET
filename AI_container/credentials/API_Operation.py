@@ -5,7 +5,7 @@ from pdfminer.high_level import extract_text as pdfminer_extract_text
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sklearn.metrics.pairwise import cosine_similarity
-from credentials.api_load import load_api
+from AI_container.credentials.api_load import load_api
 import time
 import tempfile
 import numpy as np
