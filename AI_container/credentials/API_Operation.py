@@ -15,7 +15,7 @@ from End.Operations import SheetOperations
 class PDFQA:
     def __init__(self):
         load_api()  # Carrega a API
-        self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
         self.embedding_model = 'models/embedding-001'
 
     
