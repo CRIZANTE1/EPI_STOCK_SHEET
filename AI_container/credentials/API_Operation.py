@@ -204,6 +204,7 @@ class PDFQA:
                - Falta de EPIs
                - Excesso de estoque que possa deteriorar
                - Desorganização nas trocas programadas
+            6. Quando indicar compra seja especifico, indique o EPI o CA o Valor e a quantidade especifica.   
             """
             
             # Consultar o modelo Gemini
