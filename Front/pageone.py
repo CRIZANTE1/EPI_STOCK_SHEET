@@ -141,7 +141,7 @@ def calc_position(df):
 
     # Calcular entradas e saídas usando o nome normalizado e preencher NaNs com 0
     epi_entries = df[df['transaction_type'].str.lower() == 'entrada'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
-    epi_exits = df[df['transaction_type'].str.lower() == 'saida'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
+    epi_exits = df[df['transaction_type'].str.lower() == 'saída'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
 
     # Usar reindex().add() para garantir que todos os EPIs sejam considerados
     all_epis = epi_entries.index.union(epi_exits.index)
