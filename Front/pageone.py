@@ -36,16 +36,13 @@ def front_page():
     if 'data' in st.session_state:
         df = st.session_state['data']
         
-    # Converter a coluna 'Date' para o formato datetime
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     
-    # Tratar valores vazios na coluna 'value' antes de converter
     df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
 
-    # Primeiro mostrar as funções de edição
     entrance_exit_edit_delete()
 
-    # Depois mostrar o DataFrame
+
     st.write("### Registros de Entradas e Saídas")
     st.dataframe(data=df,
                  column_config={
@@ -99,13 +96,11 @@ def front_page():
                      ),
                  }, hide_index=True)    
     
-    # Por último, mostrar o gráfico
+  
     st.write("### Análise do Estoque")
     calc_position(df)
 
-    # Adicionando a seção de análise de uso de EPI
-    st.write("### Insights de Uso de EPI")
-    analyze_epi_usage_minimalist(df)
+  
 
 #-----------------------------------------------------------------------------------------------------------------------
     """
@@ -123,18 +118,13 @@ def front_page():
     depois seleciona os 10 menores valores para visualização em um gráfico de barras. Se os valores de estoque calculados
     """
 def get_closest_match_name(name, choices):
-    # Retorna o nome mais aproximado usando a função `extractOne` do fuzzywuzzy
     closest_match, score = process.extractOne(name, choices)
-    # Retorna o nome mais aproximado usando a função `extractOne` do fuzzywuzzy
-    # Aumenta o limiar para maior precisão, se necessário, ou diminui se estiver agrupando demais
     closest_match, score = process.extractOne(name, choices, score_cutoff=90) # Ajustado score_cutoff
     return closest_match if score >= 90 else name # Retorna o original se a pontuação for baixa
 
 def calc_position(df):
-    # Fazer uma cópia para evitar SettingWithCopyWarning
     df = df.copy()
 
-    # Garantir que a coluna 'quantity' seja numérica, preenchendo NaNs com 0
     df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
 
     # Normalizar nomes dos EPIs usando uma nova coluna
