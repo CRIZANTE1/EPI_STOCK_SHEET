@@ -15,20 +15,20 @@ import os
 
 class PDFQA:
     def __init__(self):
-        load_api()  # Carrega a API
+        load_api()  
         self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
         self.embedding_model = 'models/embedding-001'
 
     
 
 
-    #-----------------Função para limpar o texto-------------------------
+    
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s,.!?\'\"-]', '', text)
         return text.strip()
 
-    #----------------- Função para fazer perguntas ao modelo Gemini----------------------
+ 
     def ask_gemini(self, context, question):
         try:
             st.info("Enviando pergunta para o modelo Gemini...")
@@ -45,7 +45,7 @@ class PDFQA:
             st.error(f"Erro ao obter resposta do modelo Gemini: {str(e)}")
             return None
 
-    # -------------------Função principal para responder perguntas---------------
+  
     def answer_question(self, pdf_files, question):
         start_time = time.time()
 
@@ -65,7 +65,7 @@ class PDFQA:
             st.exception(e)
             return f"Ocorreu um erro ao processar a pergunta: {str(e)}", 0
 
-    # -------------------Função para análise de estoque e recomendações de compra---------------
+ 
     def stock_analysis(self, stock_data, purchase_history=None, usage_history=None):
         """
         Analisa dados de estoque e fornece recomendações de compra
@@ -96,10 +96,10 @@ class PDFQA:
             4. Uma lista de recomendações de compra com quantidades sugeridas
             """
             
-            # Consultar o modelo Gemini
+          
             response = self.model.generate_content(context)
             
-            # Processar a resposta
+        
             recommendations = response.text
             
             st.success("Análise de estoque concluída com sucesso.")
