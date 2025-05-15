@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from AI_container.credentials.api_load import load_api
 import time
 import tempfile
@@ -91,6 +90,34 @@ class PDFQA:
             except Exception as e:
                 logging.warning(f"Não foi possível carregar dados dos funcionários: {e}")
             
+            # Definir informações sobre periodicidade de troca dos EPIs
+            epi_replacement_info = {
+                "Botina": {
+                    "periodicidade_troca": "6 meses",
+                    "vida_util_estoque": "12 meses (solado derrete após 1 ano em estoque)",
+                    "observacoes": "Necessário considerar vida útil limitada em estoque"
+                },
+                "Luva CA 28011": {
+                    "periodicidade_troca": {
+                        "grupo_1": "2 semanas (50% dos funcionários)",
+                        "grupo_2": "1 mês (50% dos funcionários)"
+                    },
+                    "observacoes": "Alta rotatividade, consumo variável entre funcionários"
+                },
+                "Cinto de Segurança": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral programada"
+                },
+                "Camisa": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral mínima"
+                },
+                "Calça": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral mínima"
+                }
+            }
+            
             # Análise das necessidades por tamanho
             employee_context = ""
             if employee_data is not None:
@@ -145,11 +172,38 @@ class PDFQA:
             
             {employee_context if employee_context else ''}
             
+            Informações importantes sobre periodicidade de troca dos EPIs:
+            
+            1. Botinas:
+               - Troca a cada 6 meses
+               - Vida útil em estoque: 1 ano (após isso o solado derrete)
+               - Importante manter estoque controlado devido à vida útil limitada
+            
+            2. Luvas CA 28011:
+               - 50% dos funcionários trocam a cada 2 semanas
+               - 50% dos funcionários trocam a cada 1 mês
+               - Necessário manter estoque adequado para alta rotatividade
+            
+            3. Cinto de Segurança:
+               - Troca programada a cada 6 meses
+            
+            4. Uniformes (Camisas e Calças):
+               - Troca mínima a cada 6 meses
+               - Considerar necessidade de trocas extras em casos específicos
+            
             Com base nos dados fornecidos, analise:
             1. Quais itens estão com estoque baixo e precisam ser reabastecidos
             2. Quais itens têm alto consumo e devem ter prioridade de compra
             3. Se existe algum padrão de consumo que deva ser considerado
-            4. Uma lista de recomendações de compra com quantidades sugeridas, considerando os tamanhos necessários
+            4. Uma lista de recomendações de compra com quantidades sugeridas, considerando:
+               - Os tamanhos necessários
+               - A periodicidade de troca de cada EPI
+               - A vida útil em estoque (especialmente para botinas)
+               - O consumo diferenciado (como no caso das luvas)
+            5. Sugestão de cronograma de compras para evitar:
+               - Falta de EPIs
+               - Excesso de estoque que possa deteriorar
+               - Desorganização nas trocas programadas
             """
             
             # Consultar o modelo Gemini
@@ -172,6 +226,7 @@ class PDFQA:
                 "error": f"Ocorreu um erro ao analisar o estoque: {str(e)}",
                 "timestamp": time.time()
             }
+
 
 
    
