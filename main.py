@@ -1,7 +1,6 @@
 import streamlit as st
 from Front.pageone import front_page, configurar_pagina
 from Front.admin_page import admin_page
-from Front.analytics_page import analytics_page
 from Front.ai_recommendations_page import ai_recommendations_page
 from auth import (
     show_login_page,
@@ -34,11 +33,7 @@ def main():
             st.session_state.pagina_atual = 'principal'
             st.rerun()
             
-        if st.button("📊 Análise de Utilização"):
-            st.session_state.pagina_atual = 'analytics'
-            st.rerun()
-            
-        if st.button("🤖 Recomendações de Compra"):
+        if st.button("🤖 Análise e Recomendações"):
             st.session_state.pagina_atual = 'ai_recommendations'
             st.rerun()
     
@@ -53,8 +48,6 @@ def main():
     # Mostrar a página apropriada
     if st.session_state.pagina_atual == 'admin' and is_admin():
         admin_page()
-    elif st.session_state.pagina_atual == 'analytics':
-        analytics_page()
     elif st.session_state.pagina_atual == 'ai_recommendations':
         ai_recommendations_page()
     else:
@@ -67,3 +60,4 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Erro no sistema: {str(e)}")
         st.stop()
+
