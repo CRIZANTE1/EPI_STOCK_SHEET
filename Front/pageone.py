@@ -155,17 +155,6 @@ def calc_position(df):
     # Criar dois DataFrames separados: um para itens com estoque baixo/crítico e outro para o resto
     total_epi_sorted = total_epi.sort_values()
     
-    # Identificar itens com estoque crítico (negativos ou zero)
-    critical_stock = total_epi_sorted[total_epi_sorted <= 0]
-    if not critical_stock.empty:
-        st.error("### EPIs com Estoque Crítico ⚠️")
-               
-        
-        # Mostrar lista detalhada dos itens críticos
-        st.write("Detalhamento dos itens críticos:")
-        for epi, qty in critical_stock.items():
-            st.write(f"- {epi}: {int(qty) if qty == int(qty) else qty:.2f}")
-    
     # Criar DataFrame com todos os itens em estoque (positivos)
     normal_stock = total_epi_sorted[total_epi_sorted > 0]
     if not normal_stock.empty:
