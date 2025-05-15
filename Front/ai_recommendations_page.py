@@ -4,11 +4,41 @@ import time
 from datetime import datetime
 import sys
 import os
+import re
 
 # Adicionar o diretório pai ao path para import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from End.Operations import SheetOperations
 from AI_container.credentials.API_Operation import PDFQA
+
+def extract_purchase_recommendations(text):
+    """
+    Extrai recomendações de compra do texto da IA e retorna como DataFrame
+    """
+    lines = text.split('\n')
+    recommendations = []
+    
+    for line in lines:
+        # Procura por padrões que indiquem uma recomendação de compra
+        if any(keyword in line.lower() for keyword in ['comprar', 'adquirir', 'necessário']):
+            # Tenta extrair quantidade, EPI e CA
+            quantity_match = re.search(r'(\d+)', line)
+            ca_match = re.search(r'CA (\d+)', line)
+            
+            if quantity_match:
+                quantity = int(quantity_match.group(1))
+                epi = line.split('CA')[0] if 'CA' in line else line
+                epi = re.sub(r'\d+', '', epi).strip()
+                epi = re.sub(r'^[-•\s]+', '', epi)
+                ca = ca_match.group(1) if ca_match else 'N/A'
+                
+                recommendations.append({
+                    'EPI': epi,
+                    'Quantidade': quantity,
+                    'CA': ca
+                })
+    
+    return pd.DataFrame(recommendations) if recommendations else None
 
 def ai_recommendations_page():
     """
@@ -67,6 +97,16 @@ def ai_recommendations_page():
         # Exibir resumo do estoque atual
         st.subheader("Resumo do Estoque Atual")
         
+        # Criar DataFrame para visualização
+        stock_df = pd.DataFrame(list(stock_data.items()), columns=['EPI', 'Quantidade'])
+        stock_df = stock_df.sort_values(by='Quantidade')
+        
+        # Criar gráfico de barras usando st.bar_chart
+        st.bar_chart(
+            data=stock_df.set_index('EPI'),
+            height=400
+        )
+        
         # Separar os itens em críticos (<=0) e normais (>0)
         critical_items = {k: v for k, v in stock_data.items() if v <= 0}
         normal_items = {k: v for k, v in stock_data.items() if v > 0}
@@ -74,14 +114,8 @@ def ai_recommendations_page():
         # Exibir itens críticos
         if critical_items:
             st.error("⚠️ Itens com Estoque Crítico")
-            for item, qty in critical_items.items():
-                st.write(f"- **{item}**: {int(qty) if qty == int(qty) else qty:.2f}")
-        
-        # Exibir itens normais como tabela
-        if normal_items:
-            normal_df = pd.DataFrame(list(normal_items.items()), columns=['EPI', 'Quantidade'])
-            normal_df = normal_df.sort_values(by='Quantidade')
-            st.dataframe(normal_df, use_container_width=True)
+            critical_df = pd.DataFrame(list(critical_items.items()), columns=['EPI', 'Quantidade'])
+            st.dataframe(critical_df, use_container_width=True)
         
         # Seção para análise de IA
         st.subheader("Análise de Estoque por Inteligência Artificial")
@@ -89,7 +123,6 @@ def ai_recommendations_page():
         # Botão para gerar recomendações
         if st.button("Gerar Recomendações de Compra"):
             with st.spinner("Analisando dados de estoque e gerando recomendações..."):
-                # Chamar a função de análise de estoque da IA
                 recommendations = ai_engine.stock_analysis(
                     stock_data, 
                     purchase_history,
@@ -99,18 +132,29 @@ def ai_recommendations_page():
                 if "error" in recommendations:
                     st.error(recommendations["error"])
                 else:
-                    # Exibir as recomendações
-                    st.markdown("### Recomendações de Compra")
+                    # Exibir as recomendações em formato de texto
+                    st.markdown("### Análise Geral")
                     st.markdown(recommendations["recommendations"])
                     
-                    # Salvar as recomendações no histórico de sessão
+                    # Extrair e exibir recomendações de compra em tabela
+                    st.markdown("### Recomendações de Compra")
+                    purchase_df = extract_purchase_recommendations(recommendations["recommendations"])
+                    if purchase_df is not None:
+                        st.dataframe(
+                            purchase_df.style.highlight_max(subset=['Quantidade'], color='red'),
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("Nenhuma recomendação específica de compra foi identificada.")
+                    
+                    # Salvar as recomendações no histórico
                     if 'recommendation_history' not in st.session_state:
                         st.session_state.recommendation_history = []
                     
-                    # Adicionar nova recomendação ao histórico
                     st.session_state.recommendation_history.append({
                         "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "recommendations": recommendations["recommendations"]
+                        "recommendations": recommendations["recommendations"],
+                        "purchase_df": purchase_df
                     })
         
         # Exibir histórico de recomendações
@@ -119,9 +163,15 @@ def ai_recommendations_page():
             
             for i, rec in enumerate(reversed(st.session_state.recommendation_history)):
                 with st.expander(f"Recomendação de {rec['timestamp']}"):
+                    st.markdown("#### Análise")
                     st.markdown(rec["recommendations"])
+                    
+                    st.markdown("#### Recomendações de Compra")
+                    if rec.get("purchase_df") is not None:
+                        st.dataframe(rec["purchase_df"], use_container_width=True)
+                    else:
+                        st.info("Nenhuma recomendação específica de compra foi identificada.")
                 
-                # Limitar a exibição das últimas 5 recomendações
                 if i >= 4:
                     break
     
