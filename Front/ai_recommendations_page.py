@@ -75,7 +75,7 @@ def ai_recommendations_page():
         
         # Calcular estoque atual por EPI
         epi_entries = df[df['transaction_type'] == 'entrada'].groupby('epi_name')['quantity'].sum().fillna(0)
-        epi_exits = df[df['transaction_type'] == 'saida'].groupby('epi_name')['quantity'].sum().fillna(0)
+        epi_exits = df[df['transaction_type'] == 'saída'].groupby('epi_name')['quantity'].sum().fillna(0)
         
         # Unir os índices para garantir que todos EPIs sejam considerados
         all_epis = epi_entries.index.union(epi_exits.index)
