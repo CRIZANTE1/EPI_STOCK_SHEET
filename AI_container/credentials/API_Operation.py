@@ -191,7 +191,7 @@ class PDFQA:
                - Troca mínima a cada 6 meses
                - Considerar necessidade de trocas extras em casos específicos
             
-            Com base nos dados fornecidos, analise:
+            Com base nos dados fornecidos, analise de forma minimalista (direto ao ponto):
             1. Quais itens estão com estoque baixo e precisam ser reabastecidos
             2. Quais itens têm alto consumo e devem ter prioridade de compra
             3. Se existe algum padrão de consumo que deva ser considerado
@@ -204,7 +204,7 @@ class PDFQA:
                - Falta de EPIs
                - Excesso de estoque que possa deteriorar
                - Desorganização nas trocas programadas
-            6. Quando indicar compra seja especifico, indique o EPI o CA o Valor e a quantidade especifica.   
+            6. Quando indicar compra seja especifico, indique o EPI o CA e a quantidade especifica.   
             """
             
             # Consultar o modelo Gemini
@@ -227,6 +227,7 @@ class PDFQA:
                 "error": f"Ocorreu um erro ao analisar o estoque: {str(e)}",
                 "timestamp": time.time()
             }
+
 
 
 
