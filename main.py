@@ -57,7 +57,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        st.caption ('Copyright 2024, Cristian Ferreira Carlos, Todos os direitos reservados.' )
+        st.caption ('https://www.linkedin.com/in/cristian-ferreira-carlos-256b19161/')
     except Exception as e:
         st.error(f"Erro no sistema: {str(e)}")
         st.stop()
-
+        
