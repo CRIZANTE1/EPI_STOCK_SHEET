@@ -25,7 +25,6 @@ def show_login_page():
         st.markdown("### Acesso ao Sistema")
         st.write("Por favor, faça login para acessar o sistema.")
         
-        # Botão de login
         if st.button("Fazer Login com Google"):
             try:
                 st.login()
