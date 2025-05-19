@@ -1,5 +1,5 @@
 import streamlit as st
-from End.Operations import SheetOperations  # Import SheetOperations
+from End.Operations import SheetOperations 
 
 def is_oidc_available():
     """Verifica se o login OIDC está configurado e disponível"""
@@ -31,9 +31,9 @@ def get_user_role():
     try:
         if hasattr(st.user, 'role'):
             return st.user.role
-        return "user"  # Default role if not specified
+        return "user" 
     except Exception:
-        return "user"  # Default role if an error occurs
+        return "user" 
 
 def is_admin():
     """Verifica se o usuário atual é um administrador consultando a aba 'users'."""
@@ -43,7 +43,7 @@ def is_admin():
         users_data = sheet_operations.carregar_dados_aba('users')
 
         if users_data:
-            # Assuming the first row is the header
+           
             header = users_data[0]
             try:
                 adm_name_index = header.index('adm_name')
@@ -51,7 +51,7 @@ def is_admin():
                 st.error("A coluna 'adm_name' não foi encontrada na aba 'users'.")
                 return False
 
-            admin_names = [row[adm_name_index] for row in users_data[1:]]  # Skip header row
+            admin_names = [row[adm_name_index] for row in users_data[1:]]  
             return user_name in admin_names
         else:
             st.error("Não foi possível carregar os dados da aba 'users'.")
