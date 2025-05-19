@@ -16,12 +16,10 @@ def configurar_pagina():
         layout="wide",
         initial_sidebar_state="expanded"
     )
-       
-        
+           
 def front_page():
     st.title("Controle de Estoque de EPIs") 
        
-    # Carregar dados apenas se não estiverem em cache
     if 'data' not in st.session_state:
         sheet_operations = SheetOperations()
         data = sheet_operations.carregar_dados()
@@ -113,8 +111,8 @@ def front_page():
     """
 def get_closest_match_name(name, choices):
     closest_match, score = process.extractOne(name, choices)
-    closest_match, score = process.extractOne(name, choices, score_cutoff=90) # Ajustado score_cutoff
-    return closest_match if score >= 90 else name # Retorna o original se a pontuação for baixa
+    closest_match, score = process.extractOne(name, choices, score_cutoff=90) 
+    return closest_match if score >= 90 else name 
 
 def calc_position(df):
     df = df.copy()
@@ -130,26 +128,21 @@ def calc_position(df):
     name_mapping = {name: get_closest_match_name(name, unique_epi_names) for name in unique_epi_names}
     df['epi_name_normalized'] = df['epi_name'].map(name_mapping)
 
-    # Filtrar linhas onde a normalização falhou (raro, mas possível se 'epi_name' for NaN)
+    
     df.dropna(subset=['epi_name_normalized'], inplace=True)
 
-    # Calcular entradas e saídas usando o nome normalizado e preencher NaNs com 0
     epi_entries = df[df['transaction_type'].str.lower() == 'entrada'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
     epi_exits = df[df['transaction_type'].str.lower() == 'saída'].groupby('epi_name_normalized')['quantity'].sum().fillna(0)
 
-    # Usar reindex().add() para garantir que todos os EPIs sejam considerados
     all_epis = epi_entries.index.union(epi_exits.index)
     total_epi = epi_entries.reindex(all_epis, fill_value=0) - epi_exits.reindex(all_epis, fill_value=0)
 
-    # Verificar se há dados para plotar após o cálculo
     if total_epi.empty or total_epi.isnull().all():
         st.warning("Não há dados de estoque válidos para exibir no gráfico após o cálculo.")
         return
-
-    # Criar dois DataFrames separados: um para itens com estoque baixo/crítico e outro para o resto
+        
     total_epi_sorted = total_epi.sort_values()
     
-    # Criar DataFrame com todos os itens em estoque (positivos)
     normal_stock = total_epi_sorted[total_epi_sorted > 0]
     if not normal_stock.empty:
         st.write("### Posição Atual do Estoque 📊")
