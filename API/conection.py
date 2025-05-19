@@ -12,17 +12,13 @@ def connect_sheet():
         logging.info("Tentando conectar ao Google Sheets...")
 
         if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            # Converte o bloco do secrets em string JSON e armazena como variável de ambiente
             service_account_info = dict(st.secrets["connections"]["gsheets"])
             spreadsheet_url = service_account_info.pop("spreadsheet")
             
             json_credentials = json.dumps(service_account_info)
             os.environ["GCP_SERVICE_ACCOUNT"] = json_credentials
-            
-            # Autorização via variável de ambiente
             credentials = pygsheets.authorize(service_account_env_var="GCP_SERVICE_ACCOUNT")
         else:
-            # Fallback local
             credentials_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credentials', 'cred.json')
             credentials = pygsheets.authorize(service_file=credentials_path)
             spreadsheet_url = "https://docs.google.com/spreadsheets/d/1r0nZdGCgVp_6Ti8MaHFBbtKSaK-EOezxLjSzl9pKmdc/edit#gid=0"
