@@ -9,40 +9,34 @@ from auth import (
     is_admin
 )
 
-
 def main():
     """Função principal do aplicativo"""
     configurar_pagina()
     
-    # Inicializar estado para controle de páginas
     if 'pagina_atual' not in st.session_state:
         st.session_state.pagina_atual = 'principal'
-    
-    # Verificar login e mostrar página apropriada
+
     if not show_login_page():
         return
-    
-    # Usuário está logado
+
     show_user_header()
     show_logout_button()
     
-    # Menu de navegação na sidebar
     with st.sidebar:
         st.markdown("### Menu de Navegação")
         if st.button("📋 Página Principal"):
             st.session_state.pagina_atual = 'principal'
             
-        if st.button("🤖 Análise e Recomendações"):
+        if st.button(" Análise e Recomendações"):
             st.session_state.pagina_atual = 'ai_recommendations'
-    
-        # Adicionar botão de administração se o client_secret for o correto
+            
         if is_admin():
             st.markdown("---")
             st.subheader("Administração")
             if st.button("⚙️ Painel Administrativo"):
                 st.session_state.pagina_atual = 'admin'
     
-    # Mostrar a página apropriada
+ 
     if st.session_state.pagina_atual == 'admin' and is_admin():
         admin_page()
     elif st.session_state.pagina_atual == 'ai_recommendations':
