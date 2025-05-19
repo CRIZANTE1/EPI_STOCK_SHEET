@@ -60,7 +60,7 @@ def ai_recommendations_page():
         ).head(20)[['date', 'epi_name', 'quantity', 'value']].to_dict('records')
         
         # Preparar histórico de uso (últimas 30 saídas)
-        usage_history = df[df['transaction_type'] == 'saida'].sort_values(
+        usage_history = df[df['transaction_type'] == 'saída'].sort_values(
             by='date', ascending=False
         ).head(30)[['date', 'epi_name', 'quantity', 'requester']].to_dict('records')
         
