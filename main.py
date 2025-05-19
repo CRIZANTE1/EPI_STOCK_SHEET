@@ -31,11 +31,9 @@ def main():
         st.markdown("### Menu de Navegação")
         if st.button("📋 Página Principal"):
             st.session_state.pagina_atual = 'principal'
-            st.rerun()
             
         if st.button("🤖 Análise e Recomendações"):
             st.session_state.pagina_atual = 'ai_recommendations'
-            st.rerun()
     
         # Adicionar botão de administração se o client_secret for o correto
         if is_admin():
@@ -43,7 +41,6 @@ def main():
             st.subheader("Administração")
             if st.button("⚙️ Painel Administrativo"):
                 st.session_state.pagina_atual = 'admin'
-                st.rerun()
     
     # Mostrar a página apropriada
     if st.session_state.pagina_atual == 'admin' and is_admin():
@@ -62,4 +59,5 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Erro no sistema: {str(e)}")
         st.stop()
+        
         
