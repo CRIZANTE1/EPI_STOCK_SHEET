@@ -198,12 +198,8 @@ class PDFQA:
             4. Uma lista de recomendações de compra com quantidades sugeridas, considerando:
                - Os tamanhos necessários
                - A periodicidade de troca de cada EPI
-               - A vida útil em estoque (especialmente para botinas)
-               - O consumo diferenciado (como no caso das luvas)
             5. Sugestão de cronograma de compras para evitar:
-               - Falta de EPIs
                - Excesso de estoque que possa deteriorar
-               - Desorganização nas trocas programadas
             6. Quando indicar compra seja especifico, indique o EPI o CA e a quantidade especifica.   
             """
             
