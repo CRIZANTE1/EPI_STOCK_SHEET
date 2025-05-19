@@ -19,29 +19,23 @@ def configurar_pagina():
        
         
 def front_page():
-    
     st.title("Controle de Estoque de EPIs") 
        
-    sheet_operations = SheetOperations()
-
+    # Carregar dados apenas se não estiverem em cache
     if 'data' not in st.session_state:
+        sheet_operations = SheetOperations()
         data = sheet_operations.carregar_dados()
         if data:
             df = pd.DataFrame(data[1:], columns=data[0])
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
             st.session_state['data'] = df
         else:
             st.error("Não foi possível carregar a planilha")
             return
 
-    if 'data' in st.session_state:
-        df = st.session_state['data']
-        
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
-    
-    df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
-
+    df = st.session_state['data']
     entrance_exit_edit_delete()
-
 
     st.write("### Registros de Entradas e Saídas")
     st.dataframe(data=df,
@@ -282,7 +276,6 @@ def entrance_exit_edit_delete():
                     st.error("Erro ao excluir o registro.")
         else:
             st.write("Não há entradas/saídas registradas no banco de dados.")
-
 
 #-----------------------------------------------------------------------------------------------------------------------
 
