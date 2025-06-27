@@ -40,8 +40,15 @@ def front_page():
 
     st.write("### Registros de Entradas e Saídas")
 
+    # CÓDIGO NOVO E CORRIGIDO
     if 'image_url' in df.columns:
+        # Passo 1: Transforma todos os valores nulos (None/NaN) em strings vazias.
+        df['image_url'] = df['image_url'].fillna('')
+        
+        # Passo 2: Agora o filtro funciona corretamente para encontrar apenas as URLs preenchidas.
         image_map = df[df['image_url'].str.strip() != ''].drop_duplicates(subset=['epi_name']).set_index('epi_name')['image_url'].to_dict()
+        
+        # Passo 3: Aplica o mapa para criar a coluna de exibição.
         df['imagem_display'] = df['epi_name'].map(image_map)
     else:
         df['imagem_display'] = None
