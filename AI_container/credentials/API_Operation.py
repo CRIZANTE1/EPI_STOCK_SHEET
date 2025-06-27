@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
-from AI_container.credentials.api_load import load_api
+from api_load import load_api 
 import time
 import tempfile
 import numpy as np
