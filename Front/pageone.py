@@ -53,7 +53,7 @@ def front_page():
 
     # Reordenar colunas para exibir a imagem primeiro e adicionar a configuração da imagem
     display_columns = [
-        'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
+        'id', 'imagem_url', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     # Filtra colunas que realmente existem no dataframe para evitar erros
@@ -61,7 +61,7 @@ def front_page():
     
     st.dataframe(data=df[display_columns],
                  column_config={
-                     'imagem_display': st.column_config.ImageColumn(
+                     'imagem_url': st.column_config.ImageColumn(
                          "Imagem", help="Foto do EPI"
                      ),
                      'value': st.column_config.NumberColumn(
