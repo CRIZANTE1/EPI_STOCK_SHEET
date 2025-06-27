@@ -244,7 +244,7 @@ def entrance_exit_edit_delete():
                     st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
                     st.rerun()
                 else:
-                    st.error("Erro ao excluir o registro.")---------------------------------------------------
+                    st.error("Erro ao excluir o registro.")
 
 
 
