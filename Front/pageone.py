@@ -202,7 +202,7 @@ def entrance_exit_edit_delete():
                 with col_img:
                     # Exibe a imagem se a URL existir
                     if image_url:
-                        st.image(image_url, caption=f"Imagem de: {epi_name}", use_column_width=True)
+                        st.image(image_url, caption=f"Imagem de: {epi_name}", use_container_width=True)
                     else:
                         st.info("ℹ️ Este item não possui uma imagem cadastrada.")
                 
