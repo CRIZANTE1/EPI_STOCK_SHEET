@@ -100,7 +100,6 @@ def front_page():
 
 # O restante do código abaixo está correto e foi preservado
 def get_closest_match_name(name, choices):
-    # Esta função pode não ser mais necessária se a seleção for sempre precisa, mas a mantemos por segurança.
     closest_match, score = process.extractOne(name, choices)
     closest_match, score = process.extractOne(name, choices, score_cutoff=90) 
     return closest_match if score >= 90 else name 
@@ -136,7 +135,7 @@ def calc_position(df):
 def carregar_empregados(sheet_operations):
     empregados_data = sheet_operations.carregar_dados_aba('empregados')
     if empregados_data:
-        df_empregados = pd.DataFrame(empregados_data[1:], columns=empgados_data[0])
+        df_empregados = pd.DataFrame(empregados_data[1:], columns=empregados_data[0])
         return df_empregados['name_empregado'].tolist()
     else:
         st.error("Não foi possível carregar os dados dos empregados")
@@ -162,6 +161,7 @@ def entrance_exit_edit_delete():
         st.error("A planilha não contém todas as colunas necessárias (verifique se 'image_url' existe).")
         return
 
+    all_entrance_epi_names = df[df['transaction_type'] == 'entrada']['epi_name'].unique()
     empregados = carregar_empregados(sheet_operations)
 
     with st.expander("Inserir novo registro"):
@@ -173,72 +173,63 @@ def entrance_exit_edit_delete():
         requester = None
 
         if transaction_type == "entrada":
-            # A lógica de entrada permanece a mesma
             df_ep_unicos = df[df['transaction_type'] == 'entrada'].drop_duplicates(subset=['epi_name'], keep='last')
             lista_ep_existentes = df_ep_unicos['epi_name'].tolist()
             opcoes_epi = ["Adicionar Novo EPI"] + sorted(lista_ep_existentes)
-            selecao_epi = st.selectbox("Selecionar EPI existente ou Adicionar Novo:", options=opcoes_epi, key="epi_choice_add")
+            
+            selecao_epi = st.selectbox(
+                "Selecionar EPI existente ou Adicionar Novo:", 
+                options=opcoes_epi, 
+                key="epi_choice_add"
+            )
 
             if selecao_epi == "Adicionar Novo EPI":
                 st.write("---"); st.subheader("Cadastro de Novo EPI")
                 epi_name = st.text_input("Nome do Novo EPI:", "", key="epi_name_add_new")
                 ca = st.text_input("CA do Novo EPI:", "", key="ca_add_new")
-                image_url = st.text_input("URL da Imagem:", "", placeholder="https://...", key="image_url_add_new")
+                image_url = st.text_input("URL da Imagem do Novo EPI:", "", placeholder="https://exemplo.com/imagem.jpg", key="image_url_add_new")
                 st.write("---")
             else:
                 dados_epi_selecionado = df_ep_unicos[df_ep_unicos['epi_name'] == selecao_epi].iloc[0]
                 epi_name = selecao_epi
                 ca = dados_epi_selecionado.get('CA', '')
                 image_url = dados_epi_selecionado.get('image_url', '')
+
                 col_img, col_info = st.columns([1, 2])
+
                 with col_img:
-                    if image_url: st.image(image_url, caption=f"Imagem de: {epi_name}", use_container_width=True)
-                    else: st.info("ℹ️ Item sem imagem.")
+                    if image_url:
+                        st.image(image_url, caption=f"Imagem de: {epi_name}", use_container_width=True)
+                    else:
+                        st.info("ℹ️ Este item não possui uma imagem cadastrada.")
+                
                 with col_info:
                     st.text_input("Nome do EPI", value=epi_name, disabled=True)
                     st.text_input("CA", value=ca, disabled=True)
 
         elif transaction_type == "saída":
-            # ----- INÍCIO DA NOVA LÓGICA DE SAÍDA POR CA -----
-            # 1. Pega os itens únicos de entrada para criar as opções
-            df['CA'] = df['CA'].fillna('') # Garante que CAs vazios sejam strings
-            itens_disponiveis = df[df['transaction_type'] == 'entrada'].drop_duplicates(subset=['epi_name', 'CA'], keep='last')
+            if len(all_entrance_epi_names) > 0:
+                epi_name = st.selectbox("Nome do EPI:", all_entrance_epi_names, key="epi_name_select_add")
+                
+                # ----- INÍCIO DA ALTERAÇÃO NA SAÍDA -----
+                ca = ""
+                image_url = ""
+                try:
+                    last_entry = df[(df['epi_name'] == epi_name) & (df['transaction_type'] == 'entrada')].sort_values(by='date', ascending=False).iloc[0]
+                    ca = last_entry.get('CA', '')
+                    image_url = last_entry.get('image_url', '') # Busca a URL da imagem
+                except IndexError:
+                    ca = "Não encontrado"
+                
+                # Exibe a imagem se ela existir
+                if image_url:
+                    st.image(image_url, caption=f"Visualização de: {epi_name}", width=200) # Usamos uma largura fixa para não ocupar muito espaço
+                
+                st.text_input("CA:", value=ca, disabled=True, key="ca_display_add")
+                # ----- FIM DA ALTERAÇÃO NA SAÍDA -----
 
-            if not itens_disponiveis.empty:
-                # 2. Cria uma lista de opções e um dicionário de consulta
-                opcoes_saida = []
-                lookup_saida = {}
-                for _, item in itens_disponiveis.iterrows():
-                    nome_item = item.get('epi_name', 'N/A')
-                    ca_item = item.get('CA', '')
-                    url_item = item.get('image_url', '')
-
-                    if ca_item:
-                        display_text = f"CA: {ca_item} - {nome_item}"
-                    else:
-                        display_text = f"SEM CA - {nome_item}"
-                    
-                    opcoes_saida.append(display_text)
-                    lookup_saida[display_text] = {'nome': nome_item, 'ca': ca_item, 'url': url_item}
-
-                # 3. Mostra o Selectbox com as opções formatadas
-                selecao_saida = st.selectbox("Selecione o Item (por CA):", sorted(opcoes_saida), key="saida_choice_add")
-
-                if selecao_saida:
-                    # 4. Usa o dicionário para buscar os dados do item selecionado
-                    dados_selecionados = lookup_saida[selecao_saida]
-                    epi_name = dados_selecionados['nome']
-                    ca = dados_selecionados['ca']
-                    image_url = dados_selecionados['url']
-
-                    # 5. Exibe a imagem e as informações
-                    if image_url:
-                        st.image(image_url, caption=f"Visualização de: {epi_name}", width=200)
-                    st.text_input("CA do item selecionado:", value=ca if ca else "N/A", disabled=True, key="ca_display_add")
-            
             else:
-                st.write("Não há itens de entrada registrados no banco de dados.")
-            # ----- FIM DA NOVA LÓGICA DE SAÍDA -----
+                st.write("Não há entradas registradas no banco de dados.")
             
             requester = st.selectbox("Solicitante:", empregados, key="requester_add")
             exit_date = st.date_input("Data da saída:", key="date_add")
@@ -249,10 +240,7 @@ def entrance_exit_edit_delete():
         if st.button("Adicionar Registro", key="btn_add"):
             data_transacao = str(exit_date) if transaction_type == "saída" else str(datetime.now().date())
             if epi_name and quantity:
-                # A variável image_url é preenchida tanto na entrada quanto na saída, mas só é salva na entrada.
-                # Para saídas, ela será uma string vazia se não for encontrada, o que é o comportamento correto.
-                url_para_salvar = image_url if transaction_type == "entrada" else ''
-                new_data = [epi_name, quantity, transaction_type, data_transacao, value, requester, ca, url_para_salvar]
+                new_data = [epi_name, quantity, transaction_type, data_transacao, value, requester, ca, image_url]
                 sheet_operations.adc_dados(new_data)
                 st.rerun()
             else:
@@ -260,13 +248,14 @@ def entrance_exit_edit_delete():
 
     with st.expander("Editar registro existente"):
         all_ids = df['id'].tolist()
-        selected_id = st.selectbox("Selecione a linha para editar:", all_ids, key="id_edit")
+        selected_id = st.selectbox("Selecione a linha que será editada:", all_ids, key="id_edit")
 
         if selected_id:
             selected_row = df[df['id'] == selected_id].iloc[0]
             value_float = selected_row.get('value', 0.0)
+
             epi_name_edit = st.text_input("Nome do EPI:", value=selected_row["epi_name"], key="epi_name_edit")
-            quantity_edit = st.number_input("Quantidade:", value=int(selected_row.get("quantity", 0)), key="quantity_edit")
+            quantity_edit = st.number_input("Quantidade:", value=int(selected_row["quantity"]), key="quantity_edit")
             value_edit = st.number_input("Valor:", value=value_float, key="value_edit")
             transaction_type_edit = st.selectbox("Tipo de transação:", ["entrada", "saída"], index=0 if selected_row["transaction_type"] == "entrada" else 1, key="transaction_type_edit")
             image_url_edit = st.text_input("URL da Imagem:", value=selected_row.get("image_url", ""), key="image_url_edit")
@@ -274,7 +263,7 @@ def entrance_exit_edit_delete():
             requester_edit = st.text_input("Requisitante:", value=selected_row.get("requester", ""), key="requester_edit")
 
             if st.button("Salvar Edições", key="btn_edit"):
-                updated_data = [epi_name_edit, quantity_edit, transaction_type_edit, str(selected_row["date"].date()), value_edit, requester_edit, ca_edit, image_url_edit]
+                updated_data = [epi_name_edit, quantity_edit, transaction_type_edit, selected_row["date"], value_edit, requester_edit, ca_edit, image_url_edit]
                 if sheet_operations.editar_dados(selected_id, updated_data):
                     st.success("Registro editado com sucesso!")
                     st.rerun()
@@ -284,14 +273,13 @@ def entrance_exit_edit_delete():
     with st.expander("Excluir registro existente"):
         all_epi_ids = df['id'].tolist()
         if all_epi_ids:
-            selected_id = st.selectbox("Selecione o ID para excluir:", all_epi_ids, key="id_delete")
+            selected_id = st.selectbox("Com Cautela! Selecione o ID da entrada ou saída para excluir:", all_epi_ids, key="id_delete")
             if st.button("Excluir", key="btn_delete"):
                 if sheet_operations.excluir_dados(selected_id):
                     st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
                     st.rerun()
                 else:
                     st.error("Erro ao excluir o registro.")
-
 
 
 
