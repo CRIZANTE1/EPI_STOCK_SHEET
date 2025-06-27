@@ -59,8 +59,9 @@ def front_page():
     else:
         df['imagem_display'] = None
 
+    # A coluna 'id' é a primeira na planilha, mas na exibição vamos manter a imagem primeiro.
     display_columns = [
-        'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
+        'imagem_display', 'id', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
@@ -134,7 +135,6 @@ def calc_position(df):
 def carregar_empregados(sheet_operations):
     empregados_data = sheet_operations.carregar_dados_aba('empregados')
     if empregados_data:
-        # ----- CORREÇÃO APLICADA AQUI -----
         df_empregados = pd.DataFrame(empregados_data[1:], columns=empregados_data[0])
         return df_empregados['name_empregado'].tolist()
     else:
@@ -207,12 +207,8 @@ def entrance_exit_edit_delete():
                     nome_item = item.get('epi_name', 'N/A')
                     ca_item = item.get('CA', '')
                     url_item = item.get('image_url', '')
-
-                    if ca_item:
-                        display_text = f"CA: {ca_item} - {nome_item}"
-                    else:
-                        display_text = f"SEM CA - {nome_item}"
-                    
+                    if ca_item: display_text = f"CA: {ca_item} - {nome_item}"
+                    else: display_text = f"SEM CA - {nome_item}"
                     opcoes_saida.append(display_text)
                     lookup_saida[display_text] = {'nome': nome_item, 'ca': ca_item, 'url': url_item}
 
@@ -222,10 +218,10 @@ def entrance_exit_edit_delete():
                     dados_selecionados = lookup_saida[selecao_saida]
                     epi_name = dados_selecionados['nome']
                     ca = dados_selecionados['ca']
+                    # MODIFICADO: A variável image_url agora é preenchida corretamente para a saída
                     image_url = dados_selecionados['url']
 
-                    if image_url:
-                        st.image(image_url, caption=f"Visualização de: {epi_name}", width=200)
+                    if image_url: st.image(image_url, caption=f"Visualização de: {epi_name}", width=200)
                     st.text_input("CA do item selecionado:", value=ca if ca else "N/A", disabled=True, key="ca_display_add")
             
             else:
@@ -240,8 +236,19 @@ def entrance_exit_edit_delete():
         if st.button("Adicionar Registro", key="btn_add"):
             data_transacao = str(exit_date) if transaction_type == "saída" else str(datetime.now().date())
             if epi_name and quantity:
-                url_para_salvar = image_url if transaction_type == "entrada" else ''
-                new_data = [epi_name, quantity, transaction_type, data_transacao, value, requester, ca, url_para_salvar]
+                # ----- MODIFICADO: A lógica de salvar foi simplificada e corrigida -----
+                # A variável `image_url` já contém o link correto para entradas e saídas.
+                # A ordem aqui deve corresponder à ordem das colunas na sua planilha (exceto 'id').
+                new_data = [
+                    epi_name, 
+                    quantity, 
+                    transaction_type, 
+                    data_transacao, 
+                    value, 
+                    requester, 
+                    ca, 
+                    image_url  # Agora, esta variável tem o link para ambos os casos.
+                ]
                 sheet_operations.adc_dados(new_data)
                 st.rerun()
             else:
@@ -263,7 +270,9 @@ def entrance_exit_edit_delete():
             requester_edit = st.text_input("Requisitante:", value=selected_row.get("requester", ""), key="requester_edit")
 
             if st.button("Salvar Edições", key="btn_edit"):
-                updated_data = [epi_name_edit, quantity_edit, transaction_type_edit, str(selected_row["date"].date()), value_edit, requester_edit, ca_edit, image_url_edit]
+                # Garante que a data seja uma string no formato correto
+                date_str = str(selected_row["date"].date()) if pd.notna(selected_row["date"]) else ''
+                updated_data = [epi_name_edit, quantity_edit, transaction_type_edit, date_str, value_edit, requester_edit, ca_edit, image_url_edit]
                 if sheet_operations.editar_dados(selected_id, updated_data):
                     st.success("Registro editado com sucesso!")
                     st.rerun()
@@ -280,7 +289,5 @@ def entrance_exit_edit_delete():
                     st.rerun()
                 else:
                     st.error("Erro ao excluir o registro.")
-
-
 
 
