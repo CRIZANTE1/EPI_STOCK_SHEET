@@ -60,7 +60,7 @@ def front_page():
         df['imagem_display'] = None
 
     display_columns = [
-        'imagem_display', 'id', 'epi_name', 'quantity', 'transaction_type', 
+        'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
