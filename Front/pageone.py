@@ -8,28 +8,18 @@ import plotly.express as px
 import calendar
 from auth import is_admin
 
-# 1. Criei a função clean_value(value_str)
+# Função para limpar e converter valores monetários
 def clean_value(value_str):
-    """
-    Converte uma string de valor monetário (formato BR ou US) para float.
-    Exemplos: '2.454,67' -> 2454.67 | '1500.50' -> 1500.50
-    """
     if value_str is None or pd.isna(value_str):
         return 0.0
-    
     s = str(value_str).strip()
     if s == '':
         return 0.0
-    
-    # Se contém vírgula, assume-se formato brasileiro (1.234,56)
     if ',' in s:
-        # Remove os pontos (milhar) e substitui a vírgula (decimal) por ponto
         s = s.replace('.', '').replace(',', '.')
-    
     try:
         return float(s)
     except (ValueError, TypeError):
-        # Se a conversão falhar após a limpeza, retorna 0.0
         return 0.0
 
 def configurar_pagina():
@@ -49,10 +39,7 @@ def front_page():
         if data:
             df = pd.DataFrame(data[1:], columns=data[0])
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
-            
-            # 2. Atualizei a Carga de Dados
             df['value'] = df['value'].apply(clean_value)
-
             if 'image_url' not in df.columns:
                 df['image_url'] = ''
             st.session_state['data'] = df
@@ -73,18 +60,18 @@ def front_page():
         df['imagem_display'] = None
 
     display_columns = [
-        'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
+        'imagem_display', 'id', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
+    
     df_display = df.sort_values(by='date', ascending=False)
-
-    st.dataframe(data=df[display_columns],
+    
+    st.dataframe(data=df_display[display_columns],
                  column_config={
                      'imagem_display': st.column_config.ImageColumn(
                          "Imagem", help="Foto do EPI"
                      ),
-                     # 4. Melhorei a Formatação da Tabela
                      'value': st.column_config.NumberColumn(
                          "Valor", help="O preço do material em Reais", min_value=0, max_value=100000, step=1, format='R$ %.2f'
                      ),
@@ -163,7 +150,6 @@ def entrance_exit_edit_delete():
     data = sheet_operations.carregar_dados()
     if data:
         df = pd.DataFrame(data[1:], columns=data[0])
-        # Aplicando a limpeza de valor também no dataframe desta função
         if 'value' in df.columns:
             df['value'] = df['value'].apply(clean_value)
     else:
@@ -204,13 +190,27 @@ def entrance_exit_edit_delete():
                 image_url = st.text_input("URL da Imagem do Novo EPI:", "", placeholder="https://exemplo.com/imagem.jpg", key="image_url_add_new")
                 st.write("---")
             else:
+                # ----- INÍCIO DA ALTERAÇÃO -----
                 dados_epi_selecionado = df_ep_unicos[df_ep_unicos['epi_name'] == selecao_epi].iloc[0]
                 epi_name = selecao_epi
                 ca = dados_epi_selecionado.get('CA', '')
                 image_url = dados_epi_selecionado.get('image_url', '')
-                st.text_input("Nome do EPI:", value=epi_name, disabled=True)
-                st.text_input("CA:", value=ca, disabled=True)
-                st.text_input("URL da Imagem:", value=image_url, disabled=True)
+
+                # Cria colunas para layout lado a lado
+                col_img, col_info = st.columns([1, 2])
+
+                with col_img:
+                    # Exibe a imagem se a URL existir
+                    if image_url:
+                        st.image(image_url, caption=f"Imagem de: {epi_name}", use_column_width=True)
+                    else:
+                        st.info("ℹ️ Este item não possui uma imagem cadastrada.")
+                
+                with col_info:
+                    # Exibe as informações (desabilitadas)
+                    st.text_input("Nome do EPI", value=epi_name, disabled=True)
+                    st.text_input("CA", value=ca, disabled=True)
+                # ----- FIM DA ALTERAÇÃO -----
 
         elif transaction_type == "saída":
             if len(all_entrance_epi_names) > 0:
@@ -244,8 +244,6 @@ def entrance_exit_edit_delete():
 
         if selected_id:
             selected_row = df[df['id'] == selected_id].iloc[0]
-            
-            # 3. Ajuste na Edição
             value_float = selected_row.get('value', 0.0)
 
             epi_name_edit = st.text_input("Nome do EPI:", value=selected_row["epi_name"], key="epi_name_edit")
@@ -274,7 +272,6 @@ def entrance_exit_edit_delete():
                     st.rerun()
                 else:
                     st.error("Erro ao excluir o registro.")
-
 
 
 
