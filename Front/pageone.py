@@ -61,7 +61,7 @@ def front_page():
 
     # A coluna 'id' é a primeira na planilha, mas na exibição vamos manter a imagem primeiro.
     display_columns = [
-        'imagem_display', 'id', 'epi_name', 'quantity', 'transaction_type', 
+        'id','imagem_display', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
