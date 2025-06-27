@@ -207,10 +207,4 @@ O usuário terá direitos de administrador em sua próxima sessão.
 
 📜 Licença
 
-Este projeto está licenciado sob a Licença MIT. Veja o arquivo LICENSE para mais detalhes.
-
-✒️ Autor
-
-Cristian Ferreira Carlos
-
-Perfil no LinkedIn
+Este projeto possui licença restrita.
