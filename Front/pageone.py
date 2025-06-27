@@ -77,7 +77,8 @@ def front_page():
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
-    
+    df_display = df.sort_values(by='date', ascending=False)
+
     st.dataframe(data=df[display_columns],
                  column_config={
                      'imagem_display': st.column_config.ImageColumn(
