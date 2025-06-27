@@ -190,39 +190,47 @@ def entrance_exit_edit_delete():
                 image_url = st.text_input("URL da Imagem do Novo EPI:", "", placeholder="https://exemplo.com/imagem.jpg", key="image_url_add_new")
                 st.write("---")
             else:
-                # ----- INÍCIO DA ALTERAÇÃO -----
                 dados_epi_selecionado = df_ep_unicos[df_ep_unicos['epi_name'] == selecao_epi].iloc[0]
                 epi_name = selecao_epi
                 ca = dados_epi_selecionado.get('CA', '')
                 image_url = dados_epi_selecionado.get('image_url', '')
 
-                # Cria colunas para layout lado a lado
                 col_img, col_info = st.columns([1, 2])
 
                 with col_img:
-                    # Exibe a imagem se a URL existir
                     if image_url:
                         st.image(image_url, caption=f"Imagem de: {epi_name}", use_container_width=True)
                     else:
                         st.info("ℹ️ Este item não possui uma imagem cadastrada.")
                 
                 with col_info:
-                    # Exibe as informações (desabilitadas)
                     st.text_input("Nome do EPI", value=epi_name, disabled=True)
                     st.text_input("CA", value=ca, disabled=True)
-                # ----- FIM DA ALTERAÇÃO -----
 
         elif transaction_type == "saída":
             if len(all_entrance_epi_names) > 0:
                 epi_name = st.selectbox("Nome do EPI:", all_entrance_epi_names, key="epi_name_select_add")
+                
+                # ----- INÍCIO DA ALTERAÇÃO NA SAÍDA -----
+                ca = ""
+                image_url = ""
                 try:
                     last_entry = df[(df['epi_name'] == epi_name) & (df['transaction_type'] == 'entrada')].sort_values(by='date', ascending=False).iloc[0]
                     ca = last_entry.get('CA', '')
+                    image_url = last_entry.get('image_url', '') # Busca a URL da imagem
                 except IndexError:
                     ca = "Não encontrado"
+                
+                # Exibe a imagem se ela existir
+                if image_url:
+                    st.image(image_url, caption=f"Visualização de: {epi_name}", width=200) # Usamos uma largura fixa para não ocupar muito espaço
+                
                 st.text_input("CA:", value=ca, disabled=True, key="ca_display_add")
+                # ----- FIM DA ALTERAÇÃO NA SAÍDA -----
+
             else:
                 st.write("Não há entradas registradas no banco de dados.")
+            
             requester = st.selectbox("Solicitante:", empregados, key="requester_add")
             exit_date = st.date_input("Data da saída:", key="date_add")
 
@@ -272,7 +280,6 @@ def entrance_exit_edit_delete():
                     st.rerun()
                 else:
                     st.error("Erro ao excluir o registro.")
-
 
 
 
