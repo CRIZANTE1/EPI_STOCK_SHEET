@@ -6,8 +6,6 @@
 ![alt text](https://img.shields.io/badge/Streamlit-1.44+-red.svg)
 
 
-![alt text](https://img.shields.io/badge/License-MIT-yellow.svg)
-
 Uma aplicação web inteligente construída com Streamlit para o gerenciamento de estoque de Equipamentos de Proteção Individual (EPI). Este sistema vai além do simples controle de estoque, integrando a IA Generativa do Google para fornecer recomendações de compra inteligentes, análise de tendências e previsões de consumo.
 
 A aplicação utiliza o Google Sheets como um banco de dados leve e acessível, e garante o acesso através do OIDC (OpenID Connect) do Google para uma experiência de login de usuário segura e simplificada.
