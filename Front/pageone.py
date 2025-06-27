@@ -27,7 +27,6 @@ def front_page():
             df = pd.DataFrame(data[1:], columns=data[0])
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
             df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
-            # Garante que a coluna image_url exista, mesmo que vazia
             if 'image_url' not in df.columns:
                 df['image_url'] = ''
             st.session_state['data'] = df
@@ -40,22 +39,28 @@ def front_page():
 
     st.write("### Registros de Entradas e Saídas")
 
+    # ----- INÍCIO DA CORREÇÃO -----
     if 'image_url' in df.columns:
+        # Passo 1: Transforma todos os valores nulos (None/NaN) em strings vazias.
+        df['image_url'] = df['image_url'].fillna('')
+        
+        # Passo 2: Agora o filtro funciona corretamente para encontrar apenas as URLs preenchidas.
         image_map = df[df['image_url'].str.strip() != ''].drop_duplicates(subset=['epi_name']).set_index('epi_name')['image_url'].to_dict()
+        
+        # Passo 3: Aplica o mapa para criar a coluna de exibição.
         df['imagem_display'] = df['epi_name'].map(image_map)
     else:
         df['imagem_display'] = None
+    # ----- FIM DA CORREÇÃO -----
 
-    # CORREÇÃO APLICADA AQUI: reordenando as colunas e usando 'imagem_display' para a imagem.
     display_columns = [
-        'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
+        'imagem_display', 'id', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
     ]
     display_columns = [col for col in display_columns if col in df.columns]
     
     st.dataframe(data=df[display_columns],
                  column_config={
-                     # CORREÇÃO APLICADA AQUI: a configuração é para a coluna 'imagem_display'.
                      'imagem_display': st.column_config.ImageColumn(
                          "Imagem", help="Foto do EPI"
                      ),
@@ -239,8 +244,7 @@ def entrance_exit_edit_delete():
                     st.success(f"A entrada/saída com ID {selected_id} foi excluída com sucesso!")
                     st.rerun()
                 else:
-                    st.error("Erro ao excluir o registro.")
-#-----------------------------------------------------------------------------------------------------------------------
+                    st.error("Erro ao excluir o registro.")---------------------------------------------------
 
 
 
