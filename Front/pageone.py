@@ -53,7 +53,6 @@ def front_page():
     else:
         df['imagem_display'] = None
 
-    # CORREÇÃO APLICADA AQUI: reordenando as colunas e usando 'imagem_display' para a imagem.
     display_columns = [
         'id', 'imagem_display', 'epi_name', 'quantity', 'transaction_type', 
         'date', 'value', 'requester', 'CA'
