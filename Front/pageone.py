@@ -8,6 +8,29 @@ import plotly.express as px
 import calendar
 from auth import is_admin
 
+# 1. Criei a função clean_value(value_str)
+def clean_value(value_str):
+    """
+    Converte uma string de valor monetário (formato BR ou US) para float.
+    Exemplos: '2.454,67' -> 2454.67 | '1500.50' -> 1500.50
+    """
+    if value_str is None or pd.isna(value_str):
+        return 0.0
+    
+    s = str(value_str).strip()
+    if s == '':
+        return 0.0
+    
+    # Se contém vírgula, assume-se formato brasileiro (1.234,56)
+    if ',' in s:
+        # Remove os pontos (milhar) e substitui a vírgula (decimal) por ponto
+        s = s.replace('.', '').replace(',', '.')
+    
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        # Se a conversão falhar após a limpeza, retorna 0.0
+        return 0.0
 
 def configurar_pagina():
     st.set_page_config(
@@ -26,8 +49,10 @@ def front_page():
         if data:
             df = pd.DataFrame(data[1:], columns=data[0])
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
-            df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
-            # Garante que a coluna image_url exista, mesmo que vazia
+            
+            # 2. Atualizei a Carga de Dados
+            df['value'] = df['value'].apply(clean_value)
+
             if 'image_url' not in df.columns:
                 df['image_url'] = ''
             st.session_state['data'] = df
@@ -40,15 +65,9 @@ def front_page():
 
     st.write("### Registros de Entradas e Saídas")
 
-    # CÓDIGO NOVO E CORRIGIDO
     if 'image_url' in df.columns:
-        # Passo 1: Transforma todos os valores nulos (None/NaN) em strings vazias.
         df['image_url'] = df['image_url'].fillna('')
-        
-        # Passo 2: Agora o filtro funciona corretamente para encontrar apenas as URLs preenchidas.
-        image_map = df[df['image_url'].str.strip() != ''].drop_duplicates(subset=['epi_name']).set_index('epi_name')['image_url'].to_dict()
-        
-        # Passo 3: Aplica o mapa para criar a coluna de exibição.
+        image_map = df[df['image_url'].str.strip() != ''].drop_duplicates(subset=['epi_name'], keep='last').set_index('epi_name')['image_url'].to_dict()
         df['imagem_display'] = df['epi_name'].map(image_map)
     else:
         df['imagem_display'] = None
@@ -61,12 +80,12 @@ def front_page():
     
     st.dataframe(data=df[display_columns],
                  column_config={
-                     # CORREÇÃO APLICADA AQUI: a configuração é para a coluna 'imagem_display'.
                      'imagem_display': st.column_config.ImageColumn(
                          "Imagem", help="Foto do EPI"
                      ),
+                     # 4. Melhorei a Formatação da Tabela
                      'value': st.column_config.NumberColumn(
-                         "Valor", help="O preço do material em Reais", min_value=0, max_value=100000, step=1, format='$ %.2f'
+                         "Valor", help="O preço do material em Reais", min_value=0, max_value=100000, step=1, format='R$ %.2f'
                      ),
                      'epi_name': st.column_config.TextColumn(
                          'Equipamento', help='Nome do EPI', max_chars=50
@@ -91,7 +110,7 @@ def front_page():
     st.write("### Análise do Estoque")
     calc_position(df)
 
-#-----------------------------------------------------------------------------------------------------------------------
+# O restante do código abaixo está correto e foi preservado
 def get_closest_match_name(name, choices):
     closest_match, score = process.extractOne(name, choices)
     closest_match, score = process.extractOne(name, choices, score_cutoff=90) 
@@ -125,7 +144,6 @@ def calc_position(df):
         normal_df = pd.DataFrame({'Estoque': normal_stock})
         st.bar_chart(normal_df, use_container_width=True)
         
-#-----------------------------------------------------------------------------------------------------------------------
 def carregar_empregados(sheet_operations):
     empregados_data = sheet_operations.carregar_dados_aba('empregados')
     if empregados_data:
@@ -135,7 +153,6 @@ def carregar_empregados(sheet_operations):
         st.error("Não foi possível carregar os dados dos empregados")
         return []
     
-#-----------------------------------------------------------------------------------------------------------------------    
 def entrance_exit_edit_delete():
     if not is_admin():
         st.error("Acesso negado. Apenas administradores podem realizar esta ação.")
@@ -145,6 +162,9 @@ def entrance_exit_edit_delete():
     data = sheet_operations.carregar_dados()
     if data:
         df = pd.DataFrame(data[1:], columns=data[0])
+        # Aplicando a limpeza de valor também no dataframe desta função
+        if 'value' in df.columns:
+            df['value'] = df['value'].apply(clean_value)
     else:
         st.error("Não foi possível carregar a planilha")
         return
@@ -194,8 +214,11 @@ def entrance_exit_edit_delete():
         elif transaction_type == "saída":
             if len(all_entrance_epi_names) > 0:
                 epi_name = st.selectbox("Nome do EPI:", all_entrance_epi_names, key="epi_name_select_add")
-                last_entry = df[(df['epi_name'] == epi_name) & (df['transaction_type'] == 'entrada')].sort_values(by='date', ascending=False).iloc[0]
-                ca = last_entry.get('CA', '')
+                try:
+                    last_entry = df[(df['epi_name'] == epi_name) & (df['transaction_type'] == 'entrada')].sort_values(by='date', ascending=False).iloc[0]
+                    ca = last_entry.get('CA', '')
+                except IndexError:
+                    ca = "Não encontrado"
                 st.text_input("CA:", value=ca, disabled=True, key="ca_display_add")
             else:
                 st.write("Não há entradas registradas no banco de dados.")
@@ -220,9 +243,13 @@ def entrance_exit_edit_delete():
 
         if selected_id:
             selected_row = df[df['id'] == selected_id].iloc[0]
+            
+            # 3. Ajuste na Edição
+            value_float = selected_row.get('value', 0.0)
+
             epi_name_edit = st.text_input("Nome do EPI:", value=selected_row["epi_name"], key="epi_name_edit")
             quantity_edit = st.number_input("Quantidade:", value=int(selected_row["quantity"]), key="quantity_edit")
-            value_edit = st.number_input("Valor:", value=float(selected_row["value"]), key="value_edit")
+            value_edit = st.number_input("Valor:", value=value_float, key="value_edit")
             transaction_type_edit = st.selectbox("Tipo de transação:", ["entrada", "saída"], index=0 if selected_row["transaction_type"] == "entrada" else 1, key="transaction_type_edit")
             image_url_edit = st.text_input("URL da Imagem:", value=selected_row.get("image_url", ""), key="image_url_edit")
             ca_edit = st.text_input("CA:", value=selected_row.get("CA", ""), key="ca_edit")
@@ -246,7 +273,6 @@ def entrance_exit_edit_delete():
                     st.rerun()
                 else:
                     st.error("Erro ao excluir o registro.")
-
 
 
 
