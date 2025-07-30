@@ -1,10 +1,28 @@
 import io
+import requests 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
-from reportlab.lib.colors import black, gray
+from datetime import datetime
+
+def get_logo_from_google_drive(file_id):
+    """
+    Baixa uma imagem de um link público do Google Drive.
+    Retorna um buffer de imagem ou None em caso de falha.
+    """
+    url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    try:
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            return io.BytesIO(response.content)
+        else:
+            print(f"Erro ao baixar logo: Status {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Exceção ao baixar logo: {e}")
+        return None
 
 def create_epi_ficha(employee_info, epi_records):
     """
@@ -19,7 +37,7 @@ def create_epi_ficha(employee_info, epi_records):
     """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4  # 595.27, 841.89
+    width, height = A4
 
     # --- Estilos ---
     styles = getSampleStyleSheet()
@@ -27,19 +45,20 @@ def create_epi_ficha(employee_info, epi_records):
     style_normal.fontName = 'Helvetica'
     style_normal.fontSize = 8
     style_normal.leading = 10
-
-    style_bold_small = styles['Normal']
-    style_bold_small.fontName = 'Helvetica-Bold'
-    style_bold_small.fontSize = 6
     
     # --- Coordenadas e Margens ---
     margin = 1.5 * cm
     
-    # Logo
-    try:
-        c.drawImage("assets/logo.png", margin, height - 3*cm, width=2.5*cm, preserveAspectRatio=True, mask='auto')
-    except:
-        c.drawString(margin, height - 2.5*cm, "LOGO")
+    # --- Desenhar o Cabeçalho e Estrutura ---
+    # MODIFICADO: Lógica para usar o logo do Google Drive
+    google_drive_file_id = '1AABdw4iGBJ7tsQ7fR1WGTP5cML3Jlfx_' # ID do seu arquivo
+    logo_buffer = get_logo_from_google_drive(google_drive_file_id)
+    
+    if logo_buffer:
+        c.drawImage(logo_buffer, margin, height - 3*cm, width=2.5*cm, preserveAspectRatio=True, mask='auto')
+    else:
+        # Fallback caso o download falhe
+        c.drawString(margin, height - 2.5*cm, "[LOGO]")
 
     # Título
     c.setFont("Helvetica-Bold", 16)
@@ -84,11 +103,13 @@ def create_epi_ficha(employee_info, epi_records):
     c.drawCentredString(margin + 18.5*cm, y_header - 0.3*cm, "ASSINATURA DO")
     c.drawCentredString(margin + 18.5*cm, y_header - 0.7*cm, "FUNCIONÁRIO")
 
+    # Linhas da tabela
     c.line(margin, y_start_info - 1*cm, width - margin, y_start_info - 1*cm) # Linha horizontal do header
     col_positions = [2.2, 9, 11.8, 13.5, 15.5, 17.2] # Posições X das linhas verticais
     for x_pos in col_positions:
         c.line(margin + x_pos*cm, y_start_info, margin + x_pos*cm, y_table_start)
     
+    # Linhas de dados (14 itens)
     c.setFont("Helvetica", 9)
     for i in range(14):
         y_line = y_start_info - (1 + i*0.9)*cm
@@ -101,6 +122,7 @@ def create_epi_ficha(employee_info, epi_records):
             c.drawCentredString(margin + 10.5*cm, y_line + 0.3*cm, record.get('date', ''))
             c.drawCentredString(margin + 16.2*cm, y_line + 0.3*cm, record.get('CA', ''))
 
+    # --- Termo de Responsabilidade ---
     y_termo = y_table_start - 0.5*cm
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(width/2, y_termo, '"TERMO DE RESPONSABILIDADE"')
@@ -118,9 +140,11 @@ def create_epi_ficha(employee_info, epi_records):
     c.setFont("Helvetica", 10)
     c.drawString(margin, y_termo - 3.5*cm, f"Local e data: Barueri, SP, {datetime.now().strftime('%d/%m/%Y')}")
     
+    # Assinatura
     c.line(width/2 - 4*cm, y_termo - 5*cm, width/2 + 4*cm, y_termo - 5*cm)
     c.drawCentredString(width/2, y_termo - 5.5*cm, "Assinatura do Funcionário")
 
+    # Finalizar PDF
     c.showPage()
     c.save()
     buffer.seek(0)
