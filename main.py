@@ -30,6 +30,9 @@ def main():
         if st.button(" Análise e Recomendações"):
             st.session_state.pagina_atual = 'ai_recommendations'
             
+        if st.button("📄 Gerar Ficha de EPI"):
+            st.session_state.pagina_atual = 'gerar_ficha'    
+            
         if is_admin():
             st.markdown("---")
             st.subheader("Administração")
@@ -41,6 +44,8 @@ def main():
         admin_page()
     elif st.session_state.pagina_atual == 'ai_recommendations':
         ai_recommendations_page()
+    elif st.session_state.pagina_atual == 'gerar_ficha':
+        generate_ficha_page()
     else:
         front_page()
 
