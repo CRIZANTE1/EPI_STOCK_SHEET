@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from End.Operations import SheetOperations
 from datetime import datetime
-from Utils.pdf_generator import create_epi_ficha_reportlab
+from Utils.pdf_generator import create_epi_ficha_html
 
 def generate_ficha_page():
     st.title("📄 Gerar Ficha de Controle de EPI")
