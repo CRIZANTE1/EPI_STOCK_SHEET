@@ -17,3 +17,4 @@ scikit-learn>=1.3.2
 numpy>=1.22.0
 requests
 weasyprint
+reportlab
