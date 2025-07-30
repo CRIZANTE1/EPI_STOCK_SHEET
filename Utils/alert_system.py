@@ -1,5 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
+from API_Operation import PDFQA 
+
 
 EPI_REPLACEMENT_RULES = {
 
@@ -88,3 +90,56 @@ def analyze_replacement_alerts(df_stock):
     # Ordena os alertas pelos mais vencidos primeiro
     sorted_alerts = sorted(alerts, key=lambda x: (x['Status'].split(' ')[0]), reverse=True)
     return sorted_alerts
+
+
+def get_ia_insights_for_alert(requester, epi_name, df_stock):
+    """
+    Usa a IA Generativa para analisar o histórico de um funcionário/EPI
+    e fornecer insights adicionais sobre o consumo.
+    """
+    try:
+        history_df = df_stock[
+            (df_stock['requester'] == requester) &
+            (df_stock['epi_name'] == epi_name) &
+            (df_stock['transaction_type'].str.lower() == 'saída')
+        ].copy()
+
+        if len(history_df) < 2:
+            return "Histórico insuficiente para análise de padrão de consumo."
+
+        history_df['date'] = pd.to_datetime(history_df['date'], errors='coerce')
+        history_df = history_df.sort_values(by='date')
+        
+        # Calcula os dias entre cada retirada
+        history_df['intervalo_dias'] = history_df['date'].diff().dt.days
+        
+        # Prepara o contexto para a IA
+        datas_retirada = history_df['date'].dt.strftime('%d/%m/%Y').tolist()
+        intervalos = history_df['intervalo_dias'].dropna().astype(int).tolist()
+        media_intervalo = sum(intervalos) / len(intervalos) if intervalos else 0
+        regra_troca = get_replacement_period(epi_name) or "Não definida"
+
+        contexto = f"""
+        Analise o padrão de consumo do EPI '{epi_name}' para o funcionário '{requester}'.
+
+        Dados:
+        - Datas de retirada (do mais antigo ao mais novo): {datas_retirada}
+        - Intervalo em dias entre as retiradas: {intervalos}
+        - Média de troca observada: {media_intervalo:.1f} dias.
+        - Regra de troca esperada: {regra_troca} dias.
+
+        Com base nesses dados, forneça uma análise curta e direta respondendo a:
+        1. O consumo deste funcionário é regular, muito frequente (acelerado) ou pouco frequente (lento) em comparação com a regra esperada?
+        2. Existe algum comportamento que mereça atenção (ex: um pico de retiradas, ou um longo período sem retirar)?
+        3. Dê uma recomendação breve.
+        """
+        
+        # Chama a IA
+        ai_engine = PDFQA()
+        # Usamos uma função genérica de pergunta/resposta da sua classe de IA
+        response = ai_engine.ask_gemini(contexto, "Qual a análise do padrão de consumo?")
+        
+        return response
+
+    except Exception as e:
+        return f"Erro na análise de IA: {str(e)}"  
