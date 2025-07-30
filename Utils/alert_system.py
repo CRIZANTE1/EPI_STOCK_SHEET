@@ -17,7 +17,6 @@ EPI_REPLACEMENT_RULES = {
         "abafador": 180,
         "filtro": 180,
         "cinto": 180,
-        "luva": 30, # Exemplo: luvas trocadas a cada 30 dias
         "oculos": 365, # Exemplo: óculos a cada 1 ano
     }
 }
