@@ -17,4 +17,6 @@ scikit-learn>=1.3.2
 numpy>=1.22.0
 weasyprint
 requests
-
+libpango-1.0-0
+libharfbuzz0b
+libpangoft2-1.0-0
