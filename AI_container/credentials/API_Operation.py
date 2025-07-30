@@ -15,7 +15,7 @@ from End.Operations import SheetOperations
 class PDFQA:
     def __init__(self):
         load_api()  
-        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
         self.embedding_model = 'models/embedding-001'
 
     def clean_text(self, text):
