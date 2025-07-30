@@ -2,6 +2,7 @@ import streamlit as st
 from Front.pageone import front_page, configurar_pagina
 from Front.admin_page import admin_page
 from Front.ai_recommendations_page import ai_recommendations_page
+from Front.generate_ficha_page import generate_ficha_page
 from auth import (
     show_login_page,
     show_user_header,
