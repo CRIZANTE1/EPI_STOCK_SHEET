@@ -47,25 +47,22 @@ def generate_ficha_page():
         if not df_empregados.empty:
             match = df_empregados[df_empregados['name_empregado'] == selected_employee]
             if not match.empty:
-                # Converte para dict e preenche valores nulos (NaN) com string vazia
                 employee_details = match.iloc[0].fillna('').to_dict()
 
         col1, col2, col3 = st.columns(3)
-        # Os campos são preenchidos com os dados da planilha. Se não houver dados, ficam vazios.
         registro = col1.text_input("Registro", value=employee_details.get("Registro", ""))
         setor = col2.text_input("Setor", value=employee_details.get("Setor", ""))
         cargo = col3.text_input("Cargo", value=employee_details.get("Cargo", ""))
 
-        # ---- NOVA MELHORIA: AVISO SOBRE DADOS FALTANTES ----
         dados_faltantes = []
         if not registro: dados_faltantes.append("Registro")
         if not setor: dados_faltantes.append("Setor")
         if not cargo: dados_faltantes.append("Cargo")
 
         if dados_faltantes:
-            st.info(f"Atenção: Os seguintes campos não foram encontrados na planilha para este funcionário: **{', '.join(dados_faltantes)}**. Por favor, preencha-os manualmente para que a ficha seja gerada corretamente.")
+            st.info(f"Atenção: Os campos a seguir precisam ser preenchidos: **{', '.join(dados_faltantes)}**.")
         else:
-            st.success("Todos os dados do funcionário foram carregados da planilha.")
+            st.success("Todos os dados do funcionário foram carregados.")
 
         st.header("3. EPIs Registrados")
         epi_records = df_stock[
@@ -74,15 +71,17 @@ def generate_ficha_page():
         ].sort_values(by='date', ascending=True).to_dict('records')
 
         if not epi_records:
-            st.warning("Nenhum EPI encontrado para este funcionário.")
+            st.warning("Nenhum EPI de saída encontrado para este funcionário.")
         else:
             df_display = pd.DataFrame(epi_records)[['date', 'epi_name', 'CA']]
             st.dataframe(df_display.rename(columns={'date': 'Data', 'epi_name': 'EPI', 'CA': 'C.A.'}), hide_index=True)
 
             st.header("4. Gerar Ficha")
             
-            # O botão só fica ativo se todos os campos estiverem preenchidos
-            if st.button("Gerar Ficha em PDF", disabled=(len(dados_faltantes) > 0)):
+            # Desabilita o botão se algum campo de informação do funcionário estiver vazio.
+            gerar_disabled = any(not f for f in [registro, setor, cargo])
+
+            if st.button("Gerar Ficha em PDF", disabled=gerar_disabled):
                 employee_info = {
                     "nome": selected_employee,
                     "registro": registro,
@@ -90,8 +89,9 @@ def generate_ficha_page():
                     "cargo": cargo
                 }
                 
-                with st.spinner("Gerando PDF..."):
-                    pdf_buffer = create_epi_ficha_reportlab(employee_info, epi_records)
+                with st.spinner("Gerando PDF a partir do HTML..."):
+                    # CORREÇÃO: Chamando a função correta que usa weasyprint
+                    pdf_buffer = create_epi_ficha_html(employee_info, epi_records)
                     
                     st.download_button(
                         label="📥 Baixar Ficha PDF",
@@ -99,5 +99,6 @@ def generate_ficha_page():
                         file_name=f"Ficha_EPI_{selected_employee.replace(' ', '_')}.pdf",
                         mime="application/pdf"
                     )
-            elif len(dados_faltantes) > 0:
-                 st.warning("Preencha todos os campos acima para habilitar a geração da ficha.")
+            
+            if gerar_disabled:
+                 st.warning("Preencha os campos 'Registro', 'Setor' e 'Cargo' para habilitar a geração da ficha.")
