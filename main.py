@@ -3,6 +3,7 @@ from Front.pageone import front_page, configurar_pagina
 from Front.admin_page import admin_page
 from Front.ai_recommendations_page import ai_recommendations_page
 from Front.generate_ficha_page import generate_ficha_page
+from Front.alerts_page import alerts_page
 from auth import (
     show_login_page,
     show_user_header,
@@ -32,7 +33,10 @@ def main():
             st.session_state.pagina_atual = 'ai_recommendations'
             
         if st.button("📄 Gerar Ficha de EPI"):
-            st.session_state.pagina_atual = 'gerar_ficha'    
+            st.session_state.pagina_atual = 'gerar_ficha'
+
+        if st.button("🚨 Alertas de Troca"):
+            st.session_state.pagina_atual = 'alertas'
             
         if is_admin():
             st.markdown("---")
@@ -43,6 +47,8 @@ def main():
  
     if st.session_state.pagina_atual == 'admin' and is_admin():
         admin_page()
+    elif st.session_state.pagina_atual == 'alertas':
+        alerts_page()    
     elif st.session_state.pagina_atual == 'ai_recommendations':
         ai_recommendations_page()
     elif st.session_state.pagina_atual == 'gerar_ficha':
