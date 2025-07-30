@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime, timedelta
-from API_Operation import PDFQA 
+from AI_container.credentials.API_Operation import PDFQA
 
 
 EPI_REPLACEMENT_RULES = {
