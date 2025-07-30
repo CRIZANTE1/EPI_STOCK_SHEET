@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from End.Operations import SheetOperations
-from Utils.pdf_generator import create_epi_ficha_html 
+from Utils.pdf_generator import create_epi_ficha_reportlab 
 
 def generate_ficha_page():
     st.title("📄 Gerar Ficha de Controle de EPI")
@@ -82,7 +82,7 @@ def generate_ficha_page():
                 }
                 
                 with st.spinner("Gerando PDF..."):
-                    pdf_buffer = create_epi_ficha_html(employee_info, epi_records)
+                    pdf_buffer = create_epi_ficha_reportlab(employee_info, epi_records)
                     
                     st.download_button(
                         label="📥 Baixar Ficha PDF",
