@@ -1,5 +1,3 @@
-# Utils/pdf_generator.py
-
 import io
 import requests
 import base64
