@@ -6,7 +6,11 @@ from fuzzywuzzy import process
 import altair as alt
 import plotly.express as px 
 import calendar
-from auth import is_admin
+from auth import (
+    is_admin,
+    can_edit, 
+    can_view  
+)
 
 # Função para limpar e converter valores monetários
 def clean_value(value_str):
@@ -116,7 +120,7 @@ def carregar_empregados(sheet_operations):
         return []
 
 def entrance_exit_edit_delete():
-    if not is_admin(): return
+    if not can_edit(): return
 
     sheet_operations = SheetOperations()
     data = sheet_operations.carregar_dados()
@@ -176,9 +180,7 @@ def entrance_exit_edit_delete():
         if st.button("Adicionar Registro", key="btn_add"):
             data_transacao = str(exit_date) if transaction_type == "saída" else str(datetime.now().date())
             if epi_name and quantity:
-                # ----- A CORREÇÃO PRINCIPAL ESTÁ AQUI -----
-                # Garante que NENHUM valor seja None, prevenindo o "deslizamento" de colunas.
-                # A ordem aqui é a ordem EXATA das suas colunas na planilha (depois do 'id').
+
                 new_data = [
                     epi_name or '',          # Coluna epi_name
                     quantity,                # Coluna quantity
@@ -213,7 +215,6 @@ def entrance_exit_edit_delete():
                 
                 if st.form_submit_button("Salvar Edições"):
                     date_str = str(row["date"].date()) if pd.notna(row["date"]) else ''
-                    # ----- CORREÇÃO APLICADA NA EDIÇÃO TAMBÉM -----
                     updated_data = [
                         epi_name_edit or '', quantity_edit, transaction_type_edit or '', date_str,
                         value_edit, requester_edit or '', ca_edit or '', image_url_edit or ''
@@ -229,5 +230,6 @@ def entrance_exit_edit_delete():
             if sheet_operations.excluir_dados(selected_id_del):
                 st.success(f"ID {selected_id_del} excluído com sucesso!"); st.rerun()
             else: st.error("Erro ao excluir registro.")
+
 
 
