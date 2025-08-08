@@ -5,6 +5,7 @@ from Front.ai_recommendations_page import ai_recommendations_page
 from Front.generate_ficha_page import generate_ficha_page
 from Front.alerts_page import alerts_page
 from Front.analytics_page import analytics_page  
+from Front.ca_lookup_page import ca_lookup_page 
 
 from auth import (
     show_login_page,
@@ -93,6 +94,7 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Erro inesperado no sistema: {str(e)}")
         st.stop()
+
 
 
 
