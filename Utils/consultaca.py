@@ -83,19 +83,18 @@ class CAQuery:
         
         return result
 
-    def _scrape_ca_website(self, ca_number: str, headless=True, timeout=20) -> dict:
-        """Lógica de web scraping (sua implementação original)."""
+    def _scrape_ca_website(self, ca_number: str, timeout=30) -> dict:
+        """Lógica de web scraping robusta para ambientes na nuvem."""
+        
         options = webdriver.ChromeOptions()
-        if headless:
-            options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--window-size=1920,1080')
-        options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1920x1080")
         
         try:
-            service = Service(ChromeDriverManager().install())
-            with webdriver.Chrome(service=service, options=options) as driver:
+            with webdriver.Chrome(options=options) as driver:
                 wait = WebDriverWait(driver, timeout)
                 logging.info(f"Iniciando consulta web para o CA: {ca_number}")
                 driver.get(self.BASE_URL)
@@ -105,7 +104,7 @@ class CAQuery:
                 
                 detalhar_xpath = '//*[@id="PlaceHolderConteudo_grdListaResultado_btnDetalhar_0"]'
                 botao_detalhar = wait.until(EC.visibility_of_element_located((By.XPATH, detalhar_xpath)))
-                time.sleep(1)
+                time.sleep(1) 
                 driver.execute_script("arguments[0].click();", botao_detalhar)
                            
                 wait.until(EC.presence_of_element_located((By.ID, "PlaceHolderConteudo_TDSituacao")))
