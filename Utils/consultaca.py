@@ -57,38 +57,31 @@ class CAQuery:
             logging.error(f"Falha ao salvar CA {ca_data['ca']} na planilha: {e}")
 
     def query_ca(self, ca_number: str, cache_expiry_days: int = 30) -> dict:
-        """
-        Consulta um CA. Se o cache for válido, retorna-o. Caso contrário,
-        busca no site e salva o novo resultado.
-        """
+    
         ca_number = str(ca_number).strip()
         
-        # 1. Procura pelo CA no DataFrame carregado na memória
         if not self.db_ca_df.empty:
             cached_result = self.db_ca_df[self.db_ca_df['ca'] == ca_number]
+            
             if not cached_result.empty:
-                # Pega a consulta mais recente para este CA
                 latest_entry = cached_result.sort_values(by='ultima_consulta_dt', ascending=False).iloc[0]
-                
                 last_query_date = latest_entry['ultima_consulta_dt']
                 
-                # Verifica se o cache é válido (data existe E não expirou)
                 if pd.notna(last_query_date) and (datetime.now() - last_query_date) < timedelta(days=cache_expiry_days):
-                    logging.info(f"CA {ca_number} encontrado no cache (válido). Usando dados da planilha.")
-                    # Retorna os dados do cache e PARA a execução. Nada mais é salvo.
+                    
+                    logging.info(f"CA {ca_number} encontrado na planilha (válido). Usando dados da planilha.")
+                    
                     return latest_entry.to_dict()
+                
                 else:
-                    logging.info(f"CA {ca_number} encontrado, mas o cache expirou. Reconsultando no site.")
+                    logging.info(f"CA {ca_number} encontrado na planilha, mas a consulta expirou. Reconsultando no site.")
         
-        # 2. Se a função chegou até aqui, significa que o CA não está no cache ou o cache expirou.
-        #    Portanto, é necessário fazer a consulta no site.
+
         logging.info(f"Consultando o site do governo para o CA {ca_number}...")
         result_from_site = self._scrape_ca_website(ca_number)
-
-        # 3. Se a busca no site foi bem-sucedida, SALVA O NOVO DADO na planilha.
+    
         if "erro" not in result_from_site:
             self._save_new_ca_to_sheet(result_from_site)
-            # Atualiza o DataFrame em memória para a próxima consulta na mesma sessão
             self.db_ca_df = self._load_ca_database()
         
         return result_from_site
