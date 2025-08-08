@@ -44,6 +44,9 @@ def main():
             if st.button("📄 Gerar Ficha de EPI", use_container_width=True):
                 st.session_state.pagina_atual = 'gerar_ficha'
 
+            if st.button("🔎 Consultar CA", use_container_width=True):
+                st.session_state.pagina_atual = 'consulta_ca'
+
         # -- Seção Exclusiva de Administração 
         if is_admin():
             st.markdown("---")
@@ -68,11 +71,13 @@ def main():
         alerts_page()
     elif pagina == 'gerar_ficha' and can_edit():
         generate_ficha_page()
-    elif pagina == 'ai_recommendations' and is_admin(): # Protegido para Admin
+    elif pagina == 'consulta_ca' and can_edit():
+        ca_lookup_page()
+    elif pagina == 'ai_recommendations' and is_admin(): 
         ai_recommendations_page()
-    elif pagina == 'analytics' and is_admin(): # 2. ADICIONAR ROTA PARA ANÁLISE
+    elif pagina == 'analytics' and is_admin(): 
         analytics_page()
-    elif pagina == 'admin' and is_admin(): # Protegido para Admin
+    elif pagina == 'admin' and is_admin(): 
         admin_page()
     else:
         # Se um usuário sem permissão tentar acessar uma página, ele é redirecionado
@@ -88,6 +93,7 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Erro inesperado no sistema: {str(e)}")
         st.stop()
+
 
 
 
