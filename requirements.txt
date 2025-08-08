@@ -18,3 +18,4 @@ numpy>=1.22.0
 requests
 weasyprint
 reportlab
+selenium
