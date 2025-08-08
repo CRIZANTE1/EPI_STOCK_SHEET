@@ -51,8 +51,11 @@ def front_page():
             st.error("Não foi possível carregar a planilha")
             return
 
-    df = st.session_state['data']
-    entrance_exit_edit_delete()
+    df = st.session_state['data'].copy()
+    if can_edit():
+        entrance_exit_edit_delete()
+    else:
+        st.info("Você tem permissão de visualização. Para adicionar ou editar registros, contate um administrador.")
 
     st.write("### Registros de Entradas e Saídas")
 
@@ -120,8 +123,7 @@ def carregar_empregados(sheet_operations):
         return []
 
 def entrance_exit_edit_delete():
-    if not can_edit(): return
-
+    
     sheet_operations = SheetOperations()
     data = sheet_operations.carregar_dados()
     if data:
@@ -230,6 +232,7 @@ def entrance_exit_edit_delete():
             if sheet_operations.excluir_dados(selected_id_del):
                 st.success(f"ID {selected_id_del} excluído com sucesso!"); st.rerun()
             else: st.error("Erro ao excluir registro.")
+
 
 
 
