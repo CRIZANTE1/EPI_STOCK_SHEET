@@ -39,40 +39,64 @@ def create_epi_ficha_html(employee_info, epi_records):
         else:
             epi_rows_html += f'<tr><td class="center">{i + 1}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
 
-    # Template HTML com CSS embutido. É longo, mas é o layout do seu PDF.
+    # Template HTML com CSS atualizado
     html_template = f"""
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
-            @page {{ margin: 1.5cm; }}
-            body {{ font-family: 'Helvetica', sans-serif; font-size: 10px; color: #333; }}
-            .header {{ display: flex; align-items: center; margin-bottom: 1cm; }}
-            .logo {{ width: 100px; margin-right: 20px; }}
-            .title {{ font-size: 18px; font-weight: bold; text-align: center; flex-grow: 1; }}
-            .info-box {{ border: 1px solid black; border-radius: 5px; padding: 10px; font-size: 10px; }}
+            /* MODIFICADO: Define a orientação da página e as margens */
+            @page {{
+                size: A4 landscape;
+                margin: 1cm;
+            }}
+            body {{ font-family: 'Helvetica', sans-serif; font-size: 9px; color: #333; }}
+            
+            /* NOVO: Estilo para o cabeçalho superior */
+            .top-header {{
+                text-align: right;
+                font-size: 10px;
+                color: #555;
+                margin-bottom: 10px;
+            }}
+
+            .main-header {{ display: flex; align-items: center; margin-bottom: 1cm; }}
+            .logo {{ width: 100px; margin-right: 20px; flex-shrink: 0; }}
+            .title-block {{ text-align: center; flex-grow: 1; }}
+            .main-title {{ font-size: 16px; font-weight: bold; }}
+            .info-box {{ border: 1px solid black; border-radius: 5px; padding: 10px; font-size: 9px; }}
             .info-box .row {{ display: flex; }}
             .info-box .col {{ flex: 1; padding: 2px 5px; }}
             .info-box .separator {{ border-top: 1px solid black; margin: 5px 0; }}
             .bold {{ font-weight: bold; }}
             table {{ width: 100%; border-collapse: collapse; border: 1px solid black; margin-top: 1cm; }}
-            th, td {{ border: 1px solid black; padding: 4px; text-align: left; font-size: 9px; word-wrap: break-word; }}
+            th, td {{ border: 1px solid black; padding: 4px; text-align: left; font-size: 8px; word-wrap: break-word; }}
             th {{ font-weight: bold; text-align: center; background-color: #f2f2f2; }}
             .center {{ text-align: center; }}
-            .termo {{ margin-top: 2cm; text-align: center; }}
-            .termo-texto {{ font-size: 9px; text-align: justify; margin-top: 0.5cm; }}
-            .assinatura {{ margin-top: 3cm; text-align: center; }}
+            .termo {{ margin-top: 1.5cm; text-align: center; }}
+            .termo-texto {{ font-size: 8px; text-align: justify; margin-top: 0.5cm; }}
+            .assinatura {{ margin-top: 2cm; text-align: center; }}
             .assinatura-linha {{ border-top: 1px solid black; width: 250px; margin: 0 auto; }}
         </style>
     </head>
     <body>
-        <div class="header">
-            <img class="logo" src="{logo_base64_src if logo_base64_src else ''}">
-            <div class="title">FICHA DE CONTROLE DE FORNECIMENTO DE E. P. I.</div>
+        <!-- NOVO: Bloco para o cabeçalho superior -->
+        <div class="top-header">
+            Padrão 040.010.060.006.PR - EPI<br>
+            ANEXO A – Ficha de Controle de Fornecimento de EPI<br>
+            Corporativo
         </div>
+
+        <div class="main-header">
+            <img class="logo" src="{logo_base64_src if logo_base64_src else ''}">
+            <div class="title-block">
+                <div class="main-title">FICHA DE CONTROLE DE FORNECIMENTO DE E. P. I.</div>
+            </div>
+        </div>
+
         <div class="info-box">
             <div class="row">
-                <div class="col"><span class="bold">NOME DO FUNCIONÁRIO:</span> {employee_info.get('nome', '')}</div>
+                <div class="col" style="flex-grow: 2;"><span class="bold">NOME DO FUNCIONÁRIO:</span> {employee_info.get('nome', '')}</div>
                 <div class="col"><span class="bold">REGISTRO:</span> {employee_info.get('registro', '')}</div>
             </div>
             <div class="separator"></div>
@@ -82,29 +106,32 @@ def create_epi_ficha_html(employee_info, epi_records):
                 <div class="col"><span class="bold">CARGO:</span> {employee_info.get('cargo', '')}</div>
             </div>
         </div>
+
         <table>
             <thead>
                 <tr>
-                    <th style="width: 5%;">ITEM</th>
-                    <th style="width: 30%;">RELAÇÃO DOS EQUIPAMENTOS FORNECIDOS (DISCRIMINAÇÃO)</th>
+                    <th style="width: 4%;">ITEM</th>
+                    <th style="width: 26%;">RELAÇÃO DOS EQUIPAMENTOS FORNECIDOS (DISCRIMINAÇÃO)</th>
                     <th style="width: 10%;">DATA DE ENTREGA</th>
                     <th style="width: 10%;">DATA DE DEVOLUÇÃO</th>
                     <th style="width: 10%;">TEMPO DE DURAÇÃO</th>
                     <th style="width: 10%;">Nº C. A. EPI</th>
-                    <th style="width: 25%;">ASSINATURA DO FUNCIONÁRIO</th>
+                    <th style="width: 30%;">ASSINATURA DO FUNCIONÁRIO</th>
                 </tr>
             </thead>
             <tbody>
                 {epi_rows_html}
             </tbody>
         </table>
+
         <div class="termo">
             <div class="bold">"TERMO DE RESPONSABILIDADE"</div>
             <div class="termo-texto">
                 Declaro para os devidos fins que recebi treinamento quanto à obrigatoriedade e necessidade do uso dos E.P.I.'s recomendados, (NR-6, Item 6.6, subitem 6.6.1, letra "c"); além de estar ciente da responsabilidade pela guarda e conservação dos mesmos (NR-6, Item 6.7, subitem 6.7.1, letras "b"), bem como ter conhecimento das penalidades que me podem ser impostas por não usá-lo adequadamente (C.L.T., Cap. V, Art. 158, § Único, letra "b").
             </div>
-            <p>Local e data: Barueri, SP, {datetime.now().strftime('%d/%m/%Y')}</p>
+            <p style="margin-top: 10px;">Local e data: Barueri, SP, {datetime.now().strftime('%d/%m/%Y')}</p>
         </div>
+        
         <div class="assinatura">
             <div class="assinatura-linha"></div>
             <p>Assinatura do Funcionário</p>
@@ -115,4 +142,5 @@ def create_epi_ficha_html(employee_info, epi_records):
     
     # Converte o HTML em PDF e retorna como um buffer de bytes
     pdf_bytes = HTML(string=html_template).write_pdf()
+    
     return io.BytesIO(pdf_bytes)
