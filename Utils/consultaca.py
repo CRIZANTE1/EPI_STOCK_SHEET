@@ -32,14 +32,11 @@ class CAQuery:
                 return df
         except Exception as e:
             logging.error(f"Erro ao carregar banco de dados de CAs: {e}")
-        return pd.DataFrame(columns=['ca', 'situacao', 'validade', 'nome_equipamento', 'descricao_equipamento', 'ultima_consulta', 'ultima_consulta_dt'])
+        return pd.DataFrame()
 
     def _save_new_ca_to_sheet(self, ca_data: dict):
         """Salva um NOVO registro de CA na planilha."""
-        # Adiciona a data da consulta atual ao dicionário de dados
         ca_data['ultima_consulta'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        
-        # Garante a ordem correta das colunas para salvar
         new_row_values = [
             ca_data.get('ca', ''),
             ca_data.get('situacao', ''),
@@ -53,36 +50,40 @@ class CAQuery:
             aba = archive.worksheet_by_title('db_ca')
             aba.append_table(values=[new_row_values], overwrite=False)
             logging.info(f"CA {ca_data['ca']} salvo na planilha com sucesso.")
+            # Retorna True em caso de sucesso para podermos recarregar o DF
+            return True
         except Exception as e:
             logging.error(f"Falha ao salvar CA {ca_data['ca']} na planilha: {e}")
+            return False
 
     def query_ca(self, ca_number: str, cache_expiry_days: int = 30) -> dict:
-    
+        """
+        Consulta um CA. Se o cache na planilha for válido, retorna-o. 
+        Caso contrário, busca no site e salva o novo resultado.
+        """
         ca_number = str(ca_number).strip()
-        
+                
+        # 1. Procura pelo CA no DataFrame que está em memória
         if not self.db_ca_df.empty:
-            cached_result = self.db_ca_df[self.db_ca_df['ca'] == ca_number]
-            
-            if not cached_result.empty:
-                latest_entry = cached_result.sort_values(by='ultima_consulta_dt', ascending=False).iloc[0]
+            cached_entries = self.db_ca_df[self.db_ca_df['ca'] == ca_number]
+            if not cached_entries.empty:
+                latest_entry = cached_entries.sort_values(by='ultima_consulta_dt', ascending=False).iloc[0]
                 last_query_date = latest_entry['ultima_consulta_dt']
                 
-                if pd.notna(last_query_date) and (datetime.now() - last_query_date) < timedelta(days=cache_expiry_days):
-                    
-                    logging.info(f"CA {ca_number} encontrado na planilha (válido). Usando dados da planilha.")
-                    
-                    return latest_entry.to_dict()
+                now_naive = datetime.now() # Pega a hora local do servidor, mas sem info de timezone
                 
+                if pd.notna(last_query_date) and (now_naive - last_query_date) < timedelta(days=cache_expiry_days):
+                    logging.info(f"CA {ca_number} encontrado na planilha e DENTRO do prazo de validade de {cache_expiry_days} dias. Usando dados da planilha.")
+                    return latest_entry.to_dict()
                 else:
-                    logging.info(f"CA {ca_number} encontrado na planilha, mas a consulta expirou. Reconsultando no site.")
+                    logging.info(f"CA {ca_number} encontrado, mas a consulta expirou. Reconsultando no site.")
         
-
         logging.info(f"Consultando o site do governo para o CA {ca_number}...")
         result_from_site = self._scrape_ca_website(ca_number)
     
         if "erro" not in result_from_site:
-            self._save_new_ca_to_sheet(result_from_site)
-            self.db_ca_df = self._load_ca_database()
+            if self._save_new_ca_to_sheet(result_from_site):
+                self.db_ca_df = self._load_ca_database()
         
         return result_from_site
 
