@@ -2,7 +2,7 @@ import sys
 import json
 import time
 import logging
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -10,7 +10,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 import pandas as pd
-
 from End.Operations import SheetOperations
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,16 +28,18 @@ class CAQuery:
             if data and len(data) > 1:
                 df = pd.DataFrame(data[1:], columns=data[0])
                 df['ca'] = df['ca'].astype(str)
-                # Converte a data da última consulta para o formato datetime
                 df['ultima_consulta_dt'] = pd.to_datetime(df['ultima_consulta'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
                 return df
         except Exception as e:
             logging.error(f"Erro ao carregar banco de dados de CAs: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=['ca', 'situacao', 'validade', 'nome_equipamento', 'descricao_equipamento', 'ultima_consulta', 'ultima_consulta_dt'])
 
-    def _save_ca_to_sheet(self, ca_data: dict):
-        """Salva um novo registro de CA na planilha."""
+    def _save_new_ca_to_sheet(self, ca_data: dict):
+        """Salva um NOVO registro de CA na planilha."""
+        # Adiciona a data da consulta atual ao dicionário de dados
         ca_data['ultima_consulta'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        
+        # Garante a ordem correta das colunas para salvar
         new_row_values = [
             ca_data.get('ca', ''),
             ca_data.get('situacao', ''),
@@ -48,45 +49,49 @@ class CAQuery:
             ca_data.get('ultima_consulta', '')
         ]
         try:
-            # Esta lógica adiciona uma nova linha. O sistema sempre pegará a mais recente.
             archive = self.sheet_ops.credentials.open_by_url(self.sheet_ops.my_archive_google_sheets)
             aba = archive.worksheet_by_title('db_ca')
-            aba.append_table(values=[new_row_values], overwrite=False) # Adiciona sem sobrescrever
+            aba.append_table(values=[new_row_values], overwrite=False)
             logging.info(f"CA {ca_data['ca']} salvo na planilha com sucesso.")
         except Exception as e:
             logging.error(f"Falha ao salvar CA {ca_data['ca']} na planilha: {e}")
 
     def query_ca(self, ca_number: str, cache_expiry_days: int = 30) -> dict:
         """
-        Consulta um CA com lógica de expiração de cache.
+        Consulta um CA. Se o cache for válido, retorna-o. Caso contrário,
+        busca no site e salva o novo resultado.
         """
         ca_number = str(ca_number).strip()
         
-        # 1. Verifica no cache primeiro
+        # 1. Procura pelo CA no DataFrame carregado na memória
         if not self.db_ca_df.empty:
             cached_result = self.db_ca_df[self.db_ca_df['ca'] == ca_number]
             if not cached_result.empty:
+                # Pega a consulta mais recente para este CA
                 latest_entry = cached_result.sort_values(by='ultima_consulta_dt', ascending=False).iloc[0]
                 
-                # ---- LÓGICA DE EXPIRAÇÃO DO CACHE ----
                 last_query_date = latest_entry['ultima_consulta_dt']
                 
-                # Verifica se a data é válida e se o cache ainda não expirou
+                # Verifica se o cache é válido (data existe E não expirou)
                 if pd.notna(last_query_date) and (datetime.now() - last_query_date) < timedelta(days=cache_expiry_days):
-                    logging.info(f"CA {ca_number} encontrado no cache (ainda válido).")
+                    logging.info(f"CA {ca_number} encontrado no cache (válido). Usando dados da planilha.")
+                    # Retorna os dados do cache e PARA a execução. Nada mais é salvo.
                     return latest_entry.to_dict()
                 else:
-                    logging.info(f"CA {ca_number} encontrado no cache, mas está expirado. Reconsultando...")
+                    logging.info(f"CA {ca_number} encontrado, mas o cache expirou. Reconsultando no site.")
         
-        # 2. Se não encontrou no cache ou o cache expirou, busca no site
-        logging.info(f"CA {ca_number} não encontrado ou expirado. Buscando no site do governo...")
-        result = self._scrape_ca_website(ca_number)
+        # 2. Se a função chegou até aqui, significa que o CA não está no cache ou o cache expirou.
+        #    Portanto, é necessário fazer a consulta no site.
+        logging.info(f"Consultando o site do governo para o CA {ca_number}...")
+        result_from_site = self._scrape_ca_website(ca_number)
 
-        # 3. Se a busca no site foi bem-sucedida, salva o novo resultado na planilha
-        if "erro" not in result:
-            self._save_ca_to_sheet(result)
+        # 3. Se a busca no site foi bem-sucedida, SALVA O NOVO DADO na planilha.
+        if "erro" not in result_from_site:
+            self._save_new_ca_to_sheet(result_from_site)
+            # Atualiza o DataFrame em memória para a próxima consulta na mesma sessão
+            self.db_ca_df = self._load_ca_database()
         
-        return result
+        return result_from_site
 
     def _scrape_ca_website(self, ca_number: str, timeout=30) -> dict:
         """Lógica de web scraping robusta para ambientes na nuvem."""
