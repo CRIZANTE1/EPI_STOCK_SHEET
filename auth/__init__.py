@@ -3,7 +3,9 @@ from .auth_utils import (
     is_user_logged_in,
     get_user_display_name,
     get_user_role,
-    is_admin
+    is_admin,
+    can_edit, 
+    can_view  
     
 )
 
@@ -12,3 +14,4 @@ from .login_page import (
     show_user_header,
     show_logout_button
 ) 
+
