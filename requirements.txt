@@ -18,4 +18,6 @@ numpy>=1.22.0
 requests
 weasyprint
 reportlab
-selenium
+selenium>=4.10.0
+webdriver-manager>=4.0.0
+
