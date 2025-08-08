@@ -22,17 +22,37 @@ class CAQuery:
         self.db_ca_df = self._load_ca_database()
 
     def _load_ca_database(self):
-        """Carrega a aba 'db_ca' em um DataFrame do Pandas."""
+        """Carrega a aba 'db_ca' em um DataFrame do Pandas de forma robusta."""
         try:
             data = self.sheet_ops.carregar_dados_aba('db_ca')
-            if data and len(data) > 1:
-                df = pd.DataFrame(data[1:], columns=data[0])
-                df['ca'] = df['ca'].astype(str)
-                df['ultima_consulta_dt'] = pd.to_datetime(df['ultima_consulta'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
-                return df
+            if not data or len(data) < 2:
+                return pd.DataFrame() # Retorna DF vazio se não houver dados
+    
+            df = pd.DataFrame(data[1:], columns=data[0])
+            
+            # Garante que as colunas essenciais existam
+            required_cols = ['ca', 'ultima_consulta']
+            for col in required_cols:
+                if col not in df.columns:
+                    logging.error(f"Coluna obrigatória '{col}' não encontrada na aba 'db_ca'.")
+                    return pd.DataFrame()
+            
+            df['ca'] = df['ca'].astype(str)
+            
+            df['ultima_consulta_dt'] = pd.to_datetime(
+                df['ultima_consulta'], 
+                dayfirst=True,
+                errors='coerce'
+            )
+    
+            # Remove linhas onde a data não pôde ser convertida
+            df.dropna(subset=['ultima_consulta_dt'], inplace=True)
+            
+            return df
+    
         except Exception as e:
             logging.error(f"Erro ao carregar banco de dados de CAs: {e}")
-        return pd.DataFrame()
+            return pd.DataFrame()
 
     def _save_new_ca_to_sheet(self, ca_data: dict):
         """Salva um NOVO registro de CA na planilha."""
