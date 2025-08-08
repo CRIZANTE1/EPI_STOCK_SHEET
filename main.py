@@ -6,7 +6,6 @@ from Front.generate_ficha_page import generate_ficha_page
 from Front.alerts_page import alerts_page
 from Front.analytics_page import analytics_page  
 
-# Importando todas as funções de permissão do pacote auth
 from auth import (
     show_login_page,
     show_user_header,
@@ -29,11 +28,10 @@ def main():
     show_user_header()
     show_logout_button()
     
-    # ---- MENU DE NAVEGAÇÃO COM PERMISSÕES CONSISTENTES ----
     with st.sidebar:
         st.markdown("### Menu de Navegação")
 
-        # -- Acesso Geral (Viewer, Editor, Admin) --
+        # -- Acesso Geral 
         if can_view():
             if st.button("📋 Página Principal", use_container_width=True):
                 st.session_state.pagina_atual = 'principal'
@@ -41,12 +39,12 @@ def main():
             if st.button("🚨 Alertas de Troca", use_container_width=True):
                 st.session_state.pagina_atual = 'alertas'
 
-        # -- Acesso de Edição (Editor, Admin) --
+        # -- Acesso de Edição 
         if can_edit():
             if st.button("📄 Gerar Ficha de EPI", use_container_width=True):
                 st.session_state.pagina_atual = 'gerar_ficha'
 
-        # -- Seção Exclusiva de Administração (Apenas Admin) --
+        # -- Seção Exclusiva de Administração 
         if is_admin():
             st.markdown("---")
             st.subheader("Análise e Gestão")
@@ -90,6 +88,7 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Erro inesperado no sistema: {str(e)}")
         st.stop()
+
 
 
 
