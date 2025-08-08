@@ -19,23 +19,31 @@ def analytics_page():
     
     sheet_operations = SheetOperations()
     
-    if 'data' not in st.session_state:
+    @st.cache_data(ttl=600)
+    def load_analytics_data():
+        
         data = sheet_operations.carregar_dados()
-        if data:
+        if data and len(data) > 1:
             df = pd.DataFrame(data[1:], columns=data[0])
-            st.session_state['data'] = df
-        else:
-            st.error("Não foi possível carregar a planilha")
-            return
+            df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
+            df.dropna(subset=['quantity'], inplace=True)
+            df['quantity'] = df['quantity'].astype(int)
+            
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            return df
+        return pd.DataFrame()
 
-    df = st.session_state['data']
+    df_full = load_analytics_data()
     
-    # Pré-processamento dos dados
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
-    df = df[df['transaction_type'].str.lower() == 'saída'].copy()
+    if df_full.empty:
+        st.error("Não foi possível carregar os dados para análise ou não há dados válidos.")
+        return
+
+    # Pré-processamento dos dados de saída
+    df = df_full[df_full['transaction_type'].str.lower() == 'saída'].copy()
     
     if df.empty:
-        st.warning("Nenhuma transação de saída encontrada.")
+        st.warning("Nenhuma transação de saída encontrada para análise.")
         return
         
     # Filtros em linha única
@@ -163,4 +171,5 @@ def analytics_page():
                 )
         else:
             st.success("Nenhuma requisição frequente identificada no período.") 
+
 
