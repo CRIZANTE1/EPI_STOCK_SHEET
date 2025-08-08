@@ -77,7 +77,7 @@ def analytics_page():
         
         # Preparação de dados para análise temporal
         df_temporal = df.copy()
-        df_temporal['yearmonth'] = df_temporal['date'].dt.to_period('ME')
+        df_temporal['yearmonth'] = df_temporal['date'].dt.to_period('M')
         consumo_mensal = df_temporal.groupby('yearmonth')['quantity'].sum()
         consumo_mensal = consumo_mensal.reset_index()
         consumo_mensal['yearmonth'] = consumo_mensal['yearmonth'].dt.to_timestamp()
@@ -95,7 +95,7 @@ def analytics_page():
             
             # Projetando próximos 3 meses
             ultimo_mes = consumo_mensal['yearmonth'].iloc[-1]
-            proximos_meses = pd.date_range(start=ultimo_mes, periods=4, freq='ME')[1:]
+            proximos_meses = pd.date_range(start=ultimo_mes, periods=4, freq='M')[1:]
             
             previsao = modelo_ajustado.forecast(3)
             df_previsao = pd.DataFrame({
@@ -171,6 +171,7 @@ def analytics_page():
                 )
         else:
             st.success("Nenhuma requisição frequente identificada no período.") 
+
 
 
 
