@@ -43,19 +43,22 @@ def main():
                 st.session_state.pagina_atual = 'alertas'
 
         # Páginas que exigem permissão de edição (role 'editor' ou 'admin')
-        if can_edit():
-            if st.button("💡 Análise e Recomendações", use_container_width=True):
-                st.session_state.pagina_atual = 'ai_recommendations'
-            
+        if can_edit():           
             if st.button("📄 Gerar Ficha de EPI", use_container_width=True):
                 st.session_state.pagina_atual = 'gerar_ficha'
 
         # Seção exclusiva para administradores (role 'admin')
         if is_admin():
             st.markdown("---")
+            
             st.subheader("Administração")
             if st.button("⚙️ Painel Administrativo", use_container_width=True):
                 st.session_state.pagina_atual = 'admin'
+                
+            if st.button("💡 Análise e Recomendações", use_container_width=True):
+                st.session_state.pagina_atual = 'ai_recommendations'
+                
+                
     
     pagina = st.session_state.get('pagina_atual', 'principal')
 
@@ -83,4 +86,5 @@ if __name__ == "__main__":
         st.error(f"Erro inesperado no sistema: {str(e)}")
         st.stop()
         
+
 
