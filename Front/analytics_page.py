@@ -5,8 +5,16 @@ from End.Operations import SheetOperations
 from datetime import datetime
 import plotly.express as px
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from auth import is_admin
 
 def analytics_page():
+    
+    if not is_admin():
+        st.error("Acesso Negado 🔒")
+        st.warning("Esta página contém análises estratégicas e é restrita a administradores.")
+        st.info("Por favor, selecione outra opção no menu lateral.")
+        return # Impede a execução do resto do código para não-admins
+
     st.title("Análise de Utilização de EPIs")
     
     sheet_operations = SheetOperations()
@@ -155,3 +163,4 @@ def analytics_page():
                 )
         else:
             st.success("Nenhuma requisição frequente identificada no período.") 
+
