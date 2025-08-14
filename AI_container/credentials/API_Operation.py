@@ -222,91 +222,82 @@ class PDFQA:
     
     def generate_annual_forecast(self, usage_history, purchase_history, stock_data, forecast_months=12):
         """
-        Gera uma previsão de compra anual realista, ajustada pela IA.
+        Gera uma previsão de compra anual realista, ajustada pela IA, e retorna os dados para cálculo de custo.
         """
         try:
             st.info("Iniciando a geração da previsão de compras anual...")
             
+            # --- Preparação e Cálculos ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
-
-            # --- Preparação e Cálculos ---
             df_usage = pd.DataFrame(usage_history)
             df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
             df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0)
             df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
-
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
             df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
             df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-            
             df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
-
             if df_usage.empty: return {"error": "Não há dados de consumo válidos."}
             num_months_in_data = (df_usage['date'].max() - df_usage['date'].min()).days / 30.44
             if num_months_in_data < 1: num_months_in_data = 1
             total_consumption_period = df_usage.groupby('epi_name')['quantity'].sum()
             avg_monthly_consumption = total_consumption_period / num_months_in_data
 
-            # --- Geração da Previsão Matemática (Base para a IA) ---
             forecast = []
-            
             for epi_name, avg_consumption in avg_monthly_consumption.items():
                 projected_qty = np.ceil(avg_consumption * forecast_months)
                 current_stock = stock_data.get(epi_name, 0)
-                # A necessidade de compra é a projeção menos o que já temos em estoque
-                needed_qty = max(0, projected_qty - current_stock) # Não comprar se o estoque já for suficiente
-                
+                needed_qty = max(0, projected_qty - current_stock)
                 if needed_qty > 0:
                     forecast.append({
                         "EPI": epi_name.strip(),
                         "Consumo Anual Previsto": int(projected_qty),
                         "Estoque Atual": int(current_stock),
-                        "Necessidade de Compra (cálculo)": int(needed_qty)
+                        "Necessidade de Compra (cálculo)": int(needed_qty),
+                        "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0)
                     })
             
             if not forecast:
-                return {"report": "## Previsão Anual de Compras\n\nCom base no consumo histórico, o estoque atual é suficiente para cobrir a demanda do próximo ano. Nenhuma compra é recomendada no momento."}
+                return {"report": "## Previsão Anual de Compras\n\nCom base no consumo histórico, o estoque atual é suficiente para cobrir a demanda do próximo ano. Nenhuma compra é recomendada no momento.", "data": pd.DataFrame()}
 
             df_forecast = pd.DataFrame(forecast)
             df_forecast = df_forecast.sort_values(by="Necessidade de Compra (cálculo)", ascending=False)
             
-            # --- Prompt da IA Focado em Quantidade Realista ---
+            # --- Prompt da IA ---
             st.info("IA está refinando a lista de compras...")
             prompt = f"""
-            Você é um gestor de estoque de EPIs experiente. A tabela abaixo mostra uma previsão de compra para os próximos 12 meses, calculada matematicamente.
-            Sua tarefa é revisar essa lista e gerar uma **"Lista de Compras Anual Recomendada"** final.
+            Você é um gestor de estoque de EPIs experiente. A tabela abaixo mostra uma previsão de compra para os próximos 12 meses.
+            Sua tarefa é revisar essa lista e gerar uma **"Lista de Compras Anual Recomendada"** final em formato de tabela Markdown.
 
             **Dados Calculados:**
             {df_forecast[['EPI', 'Consumo Anual Previsto', 'Estoque Atual', 'Necessidade de Compra (cálculo)']].to_markdown(index=False)}
 
             **Suas Instruções:**
-            1.  **Analise a "Necessidade de Compra (cálculo)"** para cada item.
-            2.  **Crie uma nova coluna "Qtd. a Comprar (Recomendado)"**. Para esta coluna, ajuste a quantidade calculada usando seu bom senso de gestor. Por exemplo:
-                - Se a necessidade é de 11 unidades de luvas, talvez seja melhor comprar 12 para fechar um pacote ou ter um pequeno extra.
-                - Se a necessidade é de 1.3 cintos, arredonde para 2, pois não se pode comprar um cinto quebrado.
-                - Para itens críticos ou de alto consumo, adicione um pequeno estoque de segurança (ex: 10% a mais).
-            3.  **Adicione uma coluna "Justificativa"** para explicar brevemente por que você ajustou a quantidade (ex: "Ajuste para caixa fechada", "Estoque de segurança adicionado", "Arredondamento padrão"). Se não houver ajuste, a justificativa pode ser "Cálculo direto".
+            1.  Crie uma nova tabela com as colunas: `EPI`, `Qtd. a Comprar (Recomendado)`, `Justificativa`.
+            2.  Para a coluna "Qtd. a Comprar (Recomendado)", ajuste a "Necessidade de Compra (cálculo)" usando bom senso (ex: arredondar para pacotes, adicionar estoque de segurança para itens críticos).
+            3.  Na coluna "Justificativa", explique brevemente o porquê do ajuste. Se não houver ajuste, use "Cálculo direto".
             4.  Apresente o resultado final em formato de **tabela Markdown**.
             5.  **Não inclua** as colunas "Consumo Anual Previsto" e "Estoque Atual" na tabela final.
             6.  Comece sua resposta **diretamente** com o título `### Lista de Compras Anual Recomendada`, sem nenhuma introdução.
             """
             
-            # Geração do relatório
+            # ---- BLOCO DE CÓDIGO RESTAURADO ----
             response = self.model.generate_content(prompt)
             
-            # Tratamento de resposta vazia
             try:
-                final_report = response.text
+                # A variável 'report_text' é criada aqui
+                report_text = response.text
             except ValueError:
-                final_report = "A IA não conseguiu gerar a lista de compras. Motivo provável: bloqueio de segurança. Tente novamente."
+                report_text = "A IA não conseguiu gerar a lista de compras. Motivo provável: bloqueio de segurança. Tente novamente."
 
             st.success("Previsão de compras gerada com sucesso!")
+            # Agora a variável 'report_text' existe e pode ser retornada
             return {"report": report_text, "data": df_forecast}
 
         except Exception as e:
@@ -319,6 +310,7 @@ class PDFQA:
 
 
    
+
 
 
 
