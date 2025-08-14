@@ -108,12 +108,13 @@ def ai_recommendations_page():
             st.subheader("Previsão Orçamentária Trimestral com IA")
             st.write("Esta ferramenta analisa o consumo histórico para projetar os custos com EPIs para os próximos 3 meses.")
 
-            if st.button("Gerar Previsão Orçamentária"):
-                with st.spinner("IA analisando histórico para gerar a previsão..."):
-                    forecast_result = ai_engine.generate_budget_forecast(
+            if st.button("Gerar Previsão de Compras"): # Botão atualizado
+                with st.spinner("IA analisando dados para gerar a previsão..."):
+                    forecast_result = ai_engine.generate_annual_forecast(
                         usage_history,
                         purchase_history,
-                        forecast_months=3
+                        stock_data, 
+                        forecast_months=12
                     )
                     
                     if "error" in forecast_result:
@@ -152,4 +153,5 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
