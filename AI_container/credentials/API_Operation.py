@@ -22,6 +22,7 @@ from langchain.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.docstore.document import Document
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 class PDFQA:
     def __init__(self):
@@ -340,6 +341,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
