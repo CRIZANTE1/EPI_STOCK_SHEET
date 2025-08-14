@@ -17,6 +17,11 @@ import re
 import numpy as np
 import json
 
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+from langchain.docstore.document import Document
 
 class PDFQA:
     def __init__(self):
@@ -38,6 +43,49 @@ class PDFQA:
             return float(s)
         except (ValueError, TypeError):
             return 0.0
+
+    def _create_knowledge_base(self, stock_data, purchase_history, employee_data):
+        """
+        Cria uma base de conhecimento vetorial a partir de todos os dados da empresa.
+        """
+        st.info("Criando base de conhecimento vetorial (embeddings)...")
+        documents = []
+
+        # 1. Fatos sobre Custo e Descrição dos Itens
+        df_purchase = pd.DataFrame(purchase_history)
+        df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
+        df_purchase['value'] = df_purchase['value'].apply(self.clean_monetary_value)
+        df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(1)
+        df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
+        df_purchase.dropna(subset=['date', 'value', 'quantity'], inplace=True)
+        df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
+        latest_costs_df = df_purchase.sort_values('date', ascending=False).drop_duplicates('epi_name', keep='first')
+        for _, row in latest_costs_df.iterrows():
+            doc_content = f"Item: '{row['epi_name']}', Categoria: EPI, Custo Unitário: R${row['unit_cost']:.2f}, CA: {row.get('CA', 'N/A')}"
+            documents.append(Document(page_content=doc_content))
+
+        # 2. Fatos sobre Necessidades dos Funcionários
+        df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
+        uniform_needs_str = df_employees[['Empregado', 'Tamanho Camisa Manga Comprida', 'Tamanho Calça', 'Tamanho do calçado']].to_string(index=False)
+        documents.append(Document(page_content=f"Necessidades de Uniformes por Funcionário:\n{uniform_needs_str}"))
+        total_calcas = pd.to_numeric(df_employees['Quantidade de Calças'], errors='coerce').sum()
+        documents.append(Document(page_content=f"Fato de Necessidade: A necessidade total de calças para todos os funcionários é de {total_calcas} unidades."))
+        total_calcados = pd.to_numeric(df_employees['Quantidade de Calçado'], errors='coerce').sum()
+        documents.append(Document(page_content=f"Fato de Necessidade: A necessidade total de calçados para todos os funcionários é de {total_calcados} unidades."))
+
+
+        # 3. Fatos sobre Estoque Atual
+        df_stock = pd.DataFrame(list(stock_data.items()), columns=['EPI', 'Estoque_Atual'])
+        stock_str = df_stock.to_string(index=False)
+        documents.append(Document(page_content=f"Estoque Atual de Itens:\n{stock_str}"))
+
+        if not documents:
+            return None
+        # Usa FAISS para criar o banco de dados vetorial
+        vector_store = FAISS.from_documents(documents, self.embeddings)
+        st.success(f"Base de conhecimento criada com {len(documents)} fatos relevantes.")
+        # Retorna um "retriever" que busca os 'k' documentos mais relevantes
+        return vector_store.as_retriever(search_kwargs={"k": 50})
 
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
@@ -293,6 +341,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
