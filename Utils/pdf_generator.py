@@ -3,6 +3,7 @@ import requests
 import base64
 from weasyprint import HTML
 from datetime import datetime
+import markdown 
 
 def get_logo_base64(file_id):
     """ Baixa uma imagem do Google Drive e a converte para uma string Base64. """
