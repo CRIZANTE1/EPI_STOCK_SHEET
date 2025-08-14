@@ -278,7 +278,8 @@ class PDFQA:
                     })
             
             if not forecast:
-                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente para o próximo ano. Nenhuma compra recomendada.", "data": pd.DataFrame()}
+                empty_df = pd.DataFrame(columns=["EPI", "Necessidade de Compra (cálculo)", "Custo Unit. (R$)"])
+                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "data": empty_df}
 
             df_forecast = pd.DataFrame(forecast)
             df_forecast = df_forecast.sort_values(by="Necessidade de Compra (cálculo)", ascending=False)
@@ -332,6 +333,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
