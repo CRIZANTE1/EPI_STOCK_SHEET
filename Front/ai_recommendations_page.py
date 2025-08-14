@@ -107,9 +107,11 @@ def ai_recommendations_page():
         with tab2:
             st.subheader("Previsão de Compras Anual com IA")
             st.write("Esta ferramenta analisa o consumo histórico e o estoque atual para gerar uma lista de compras realista para os próximos 12 meses.")
-    
+
+            # O botão agora é a única fonte para iniciar a análise
             if st.button("Gerar Previsão de Compras"):
                 with st.spinner("IA analisando dados para gerar a previsão..."):
+                    # Chama a função e salva o resultado completo no session_state
                     forecast_result = ai_engine.generate_annual_forecast(
                         usage_history,
                         purchase_history,
@@ -117,29 +119,34 @@ def ai_recommendations_page():
                         forecast_months=12
                     )
                     
-                    # Salva o resultado completo no session_state
                     st.session_state.latest_forecast_result = forecast_result
                     
+                    # Inicializa o histórico se não existir
                     if 'forecast_history' not in st.session_state:
                         st.session_state.forecast_history = []
+                    
+                    # Salva o resultado completo no histórico com a chave 'result'
                     st.session_state.forecast_history.append({
                         "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "result": forecast_result # Salva o resultado completo no histórico
+                        "result": forecast_result 
                     })
             
-            # Exibe o último relatório gerado e o CUSTO TOTAL
+
             if 'latest_forecast_result' in st.session_state:
                 result = st.session_state.latest_forecast_result
                 
+                # Verifica se houve um erro durante a geração
                 if "error" in result:
                     st.error(result["error"])
                 else:
-                    report_text = result.get("report", "")
+                    # Extrai o relatório de texto e o dataframe de dados
+                    report_text = result.get("report", "Nenhum relatório gerado.")
                     df_data = result.get("data", pd.DataFrame())
-    
-                    # ---- NOVO: Bloco para calcular e exibir o Custo Total ----
+
+                    st.markdown("---")
+                    
+                    # Calcula e exibe o Custo Total usando o DataFrame de dados
                     if not df_data.empty:
-                        # Calcula o custo total baseado na necessidade de compra
                         total_cost = (df_data['Necessidade de Compra (cálculo)'] * df_data['Custo Unit. (R$)']).sum()
                         
                         st.metric(
@@ -147,13 +154,11 @@ def ai_recommendations_page():
                             value=f"R$ {total_cost:,.2f}".replace(',', 'v').replace('.', ',').replace('v', '.')
                         )
                     
-                    # Exibe o relatório gerado pela IA
+                    # Exibe o relatório gerado pela IA (títulos, tabelas, etc.)
                     st.markdown(report_text)
                     
-                    # ---- Botão de Download ----
+                    # Botão de Download
                     st.markdown("---")
-                    # A função de PDF precisaria ser adaptada para incluir o total,
-                    # mas por enquanto vamos gerar o PDF apenas com o relatório da IA.
                     pdf_buffer = create_forecast_pdf_from_report(report_text)
                     st.download_button(
                         label="📥 Baixar Relatório em PDF",
@@ -161,21 +166,27 @@ def ai_recommendations_page():
                         file_name=f"Previsao_Compras_{datetime.now().strftime('%Y-%m-%d')}.pdf",
                         mime="application/pdf"
                     )
-    
-            # Exibe o histórico de previsões
+
+
             if 'forecast_history' in st.session_state and st.session_state.forecast_history:
                 with st.expander("Ver Histórico de Previsões de Compra"):
+                    # Itera sobre o histórico de forma reversa (mais recente primeiro)
                     for rec in reversed(st.session_state.forecast_history):
                         st.markdown(f"**Previsão de {rec['timestamp']}**")
-                        if "error" in rec["result"]:
-                            st.error(rec["result"]["error"])
+                        
+                        history_result = rec.get("result", {})
+                        
+                        if "error" in history_result:
+                            st.error(history_result["error"])
                         else:
-                            st.markdown(rec["result"]["report"])
+                            st.markdown(history_result.get("report", "Relatório não disponível."))
+                        
                         st.markdown("---")
 
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
