@@ -25,9 +25,22 @@ from langchain.docstore.document import Document
 
 class PDFQA:
     def __init__(self):
-        load_api()  
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
-        self.embedding_model = 'models/embedding-001'
+        self.genai = load_api()
+        if not self.genai:
+            st.error("Falha ao carregar a API do Google Generative AI.")
+            return
+
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        }
+        
+        # ---- CORREÇÃO APLICADA AQUI ----
+        # Garante que tanto o LLM quanto o modelo de Embeddings sejam inicializados
+        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, safety_settings=safety_settings)
+        self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         
     @staticmethod
     def clean_monetary_value(value):
@@ -327,6 +340,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
