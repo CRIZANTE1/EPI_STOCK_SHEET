@@ -222,14 +222,14 @@ class PDFQA:
 
     
     
-    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, forecast_months=12):
+    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, budget_target=180000, forecast_months=12):
         """
-        Gera uma previsão de compra anual, com quantidades ajustadas pela IA e custo recalculado em Python.
+        Gera uma previsão de compra anual otimizada para uma meta orçamentária.
         """
         try:
             st.info("Iniciando a geração da previsão de compras anual...")
             
-            # --- 1. Preparação e Cálculos em Python (Garantia de Precisão) ---
+            # --- 1. Preparação e Cálculos Precisos em Python ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
             
@@ -264,84 +264,66 @@ class PDFQA:
                 current_stock = stock_data.get(epi_name, 0)
                 needed_qty = max(0, projected_qty - current_stock)
                 
-                # Inclui o item na previsão mesmo que a necessidade seja zero, para a IA ter o contexto completo
-                forecast.append({
-                    "EPI": epi_name.strip(),
-                    "Consumo Anual Previsto": int(projected_qty),
-                    "Estoque Atual": int(current_stock),
-                    "Necessidade de Compra (cálculo)": int(needed_qty),
-                    "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0)
-                })
+                if needed_qty > 0:
+                    forecast.append({
+                        "EPI": epi_name.strip(),
+                        "Necessidade Ideal (12m)": int(needed_qty),
+                        "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0)
+                    })
             
             if not forecast:
-                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "data": pd.DataFrame()}
+                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente para o próximo ano. Nenhuma compra recomendada."}
     
             df_forecast = pd.DataFrame(forecast)
-            # Filtra apenas itens que realmente precisam ser comprados
-            df_forecast_to_buy = df_forecast[df_forecast['Necessidade de Compra (cálculo)'] > 0].copy()
-            df_forecast_to_buy = df_forecast_to_buy.sort_values(by="Necessidade de Compra (cálculo)", ascending=False)
+            df_forecast['Custo Ideal (R$)'] = df_forecast['Necessidade Ideal (12m)'] * df_forecast['Custo Unit. (R$)']
+            df_forecast = df_forecast.sort_values(by="Custo Ideal (R$)", ascending=False)
             
-            if df_forecast_to_buy.empty:
-                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "data": pd.DataFrame()}
-                
-            # --- 2. Chamada à IA APENAS para a parte criativa (justificativas) ---
-            st.info("IA está gerando recomendações e justificativas...")
-            prompt_recommendation = f"""
-            Você é um gestor de estoque de EPIs. A tabela abaixo mostra uma previsão de compra matemática para os próximos 12 meses.
-            Sua tarefa é revisar **TODOS OS ITENS** e gerar uma tabela Markdown com as colunas: `EPI`, `Qtd. a Comprar (Recomendado)`, `Justificativa`.
+            total_ideal_cost = df_forecast['Custo Ideal (R$)'].sum()
+            
+            # --- 2. Prompt de Otimização para a IA ---
+            st.info(f"Custo ideal calculado: R$ {total_ideal_cost:,.2f}. Solicitando otimização da IA para a meta de R$ {budget_target:,.2f}...")
+            
+            prompt = f"""
+            **Sua Tarefa:** Você é um gestor de compras sênior com a tarefa de otimizar um orçamento de EPIs.
     
-            **Dados Calculados:**
-            {df_forecast_to_buy[['EPI', 'Consumo Anual Previsto', 'Estoque Atual', 'Necessidade de Compra (cálculo)']].to_markdown(index=False)}
+            **Contexto:**
+            - A "Necessidade Ideal" de compra para o próximo ano, calculada com base no consumo, totaliza **R$ {total_ideal_cost:,.2f}**.
+            - Seu orçamento disponível é de **R$ {budget_target:,.2f}**.
+            - Você precisa criar uma **"Lista de Compras Otimizada"** que se ajuste a este orçamento.
     
-            **Instruções:**
-            1. Para a coluna "Qtd. a Comprar (Recomendado)", ajuste a "Necessidade de Compra (cálculo)" usando bom senso (arredondar para pacotes, adicionar estoque de segurança).
-            2. Na "Justificativa", explique o porquê do ajuste. Se não houver ajuste, use "Cálculo direto".
-            3. Mantenha os nomes dos EPIs exatamente como estão, em uma única linha.
-            4. **Sua resposta deve conter APENAS a tabela Markdown, sem nenhum outro texto, título ou introdução.**
+            **Dados de Entrada (Necessidade Ideal):**
+            ```
+            {df_forecast.to_string(index=False)}
+            ```
+    
+            **Instruções para a Otimização:**
+            1.  **Crie uma nova tabela Markdown** com as colunas: `EPI`, `Qtd. Otimizada`, `Custo Total (R$)`, `Justificativa`.
+            2.  **Ajuste as Quantidades:** Na coluna `Qtd. Otimizada`, reduza a "Necessidade Ideal" para que o custo total final fique o mais próximo possível de R$ {budget_target:,.2f}, sem ultrapassá-lo.
+            3.  **Priorize:** Mantenha 100% da quantidade para itens de segurança críticos (ex: Cintos, Travas Quedas, Luvas Isolantes) e de baixo custo. Reduza a quantidade de itens menos críticos ou que podem ser comprados em lotes menores (ex: comprar para 6 ou 9 meses em vez de 12).
+            4.  **Calcule o Custo Total:** Para cada linha, calcule o `Custo Total (R$)` multiplicando a `Qtd. Otimizada` pelo `Custo Unit. (R$)`.
+            5.  **Justifique:** Na coluna "Justificativa", explique brevemente a decisão (ex: "Compra para 6 meses", "Item crítico - 100% mantido", "Redução para ajuste orçamentário").
+            6.  **Formate a Saída:** Apresente o resultado final no seguinte formato Markdown, e **NADA MAIS**:
+                - Um título: `### Previsão de Compras Anual Otimizada`
+                - Um subtítulo com o novo orçamento total calculado por você (ex: `#### Orçamento Otimizado: R$ 199.850,50`).
+                - A tabela final que você criou.
             """
             
-            response = self.model.generate_content(prompt_recommendation)
-            try:
-                recommended_table_md = response.text
-            except ValueError:
-                return {"error": "A IA não conseguiu gerar a lista de compras (bloqueio de segurança)."}
-    
-            # --- 3. Processamento Final e Cálculo de Custo em Python ---
-            st.info("Calculando custo final com base nas recomendações...")
-            final_report = "### Lista de Compras Anual Recomendada\n\n"
-            total_cost_final = 0
+            # --- 3. Chamada Única à IA e Retorno Direto ---
+            response = self.model.generate_content(prompt)
             
             try:
-                df_recommended = pd.read_csv(StringIO(recommended_table_md.replace('<br>', ' ')), sep='|').dropna(axis=1, how='all').iloc[1:]
-                df_recommended.columns = [col.strip() for col in df_recommended.columns]
-                df_recommended['EPI'] = df_recommended['EPI'].str.strip()
-                df_recommended['Qtd. a Comprar (Recomendado)'] = pd.to_numeric(df_recommended['Qtd. a Comprar (Recomendado)'], errors='coerce').fillna(0)
-                
-                # Mapeia os custos e calcula o total
-                df_recommended['Custo Unit. (R$)'] = df_recommended['EPI'].map(unit_costs)
-                df_recommended.fillna({'Custo Unit. (R$)': 0}, inplace=True)
-                df_recommended['Custo Total (R$)'] = df_recommended['Qtd. a Comprar (Recomendado)'] * df_recommended['Custo Unit. (R$)']
-                
-                total_cost_final = df_recommended['Custo Total (R$)'].sum()
-                
-            except Exception as e:
-                logging.error(f"Erro ao processar tabela da IA, usando cálculo direto: {e}")
-                # Fallback: Se a IA falhar, usa o cálculo matemático direto
-                df_forecast_to_buy['Custo Total (R$)'] = df_forecast_to_buy['Necessidade de Compra (cálculo)'] * df_forecast_to_buy['Custo Unit. (R$)']
-                total_cost_final = df_forecast_to_buy['Custo Total (R$)'].sum()
-                recommended_table_md = df_forecast_to_buy[['EPI', 'Necessidade de Compra (cálculo)']].rename(columns={'Necessidade de Compra (cálculo)': 'Qtd. a Comprar'}).to_markdown(index=False)
-                
-            formatted_total_cost = '{:_.2f}'.format(total_cost_final).replace('.', ',').replace('_', '.')
-            report_subtitle = f"#### Orçamento Total Estimado: R$ {formatted_total_cost}"
-            final_report += f"{report_subtitle}\n\n{recommended_table_md}"
+                final_report = response.text
+            except ValueError:
+                final_report = "A IA não conseguiu gerar o relatório, possivelmente devido a um bloqueio de segurança."
     
-            st.success("Previsão de compras gerada com sucesso!")
+            st.success("Previsão de compras otimizada gerada com sucesso!")
             return {"report": final_report}
     
         except Exception as e:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
