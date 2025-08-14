@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 import sys
 import os
+from Utils.pdf_generator import create_forecast_pdf_from_report
 
 # Adicionar o diretório pai ao path para import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -109,9 +110,9 @@ def ai_recommendations_page():
         with tab2:
             st.subheader("Previsão Orçamentária Trimestral com IA")
             st.write("Esta ferramenta analisa o consumo histórico para projetar os custos com EPIs para os próximos 3 meses.")
-
+    
             if st.button("Gerar Previsão Orçamentária"):
-                with st.spinner("IA analisando histórico de consumo e custos para gerar a previsão..."):
+                with st.spinner("IA analisando histórico para gerar a previsão..."):
                     forecast_result = ai_engine.generate_budget_forecast(
                         usage_history,
                         purchase_history,
@@ -121,18 +122,36 @@ def ai_recommendations_page():
                     if "error" in forecast_result:
                         st.error(forecast_result["error"])
                     else:
+                        # Salva o resultado no session_state para ser usado pelo botão de download
                         st.session_state.latest_forecast = forecast_result["report"]
+                        
                         if 'forecast_history' not in st.session_state:
                             st.session_state.forecast_history = []
                         st.session_state.forecast_history.append({
                             "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                             "report": forecast_result["report"]
                         })
-
+    
+            # Exibe o último relatório gerado e o botão de download
             if 'latest_forecast' in st.session_state:
                 st.markdown("### Última Previsão Gerada")
                 st.markdown(st.session_state.latest_forecast)
-
+                
+                # ---- BLOCO ADICIONADO PARA O BOTÃO DE DOWNLOAD ----
+                st.markdown("---")
+                
+                # Prepara os dados para o download
+                report_text = st.session_state.latest_forecast
+                pdf_buffer = create_forecast_pdf_from_report(report_text)
+                
+                st.download_button(
+                    label="📥 Baixar Relatório em PDF",
+                    data=pdf_buffer,
+                    file_name=f"Previsao_Orcamentaria_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                    mime="application/pdf"
+                )
+    
+            # Exibe o histórico de previsões
             if 'forecast_history' in st.session_state and st.session_state.forecast_history:
                 with st.expander("Ver Histórico de Previsões Orçamentárias"):
                     for rec in reversed(st.session_state.forecast_history):
@@ -140,6 +159,3 @@ def ai_recommendations_page():
                         st.markdown(rec["report"])
                         st.markdown("---")
 
-    except Exception as e:
-        st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
-        st.exception(e)
