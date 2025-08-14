@@ -14,6 +14,8 @@ from End.Operations import SheetOperations
 from datetime import datetime, timedelta
 from io import StringIO
 import re
+import numpy as np 
+
 
 class PDFQA:
     def __init__(self):
@@ -323,6 +325,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
