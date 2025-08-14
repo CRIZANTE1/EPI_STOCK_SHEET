@@ -278,11 +278,12 @@ class PDFQA:
         Gera o Relatório de Custeio completo usando a abordagem RAG.
         """
         try:
+            # Chama a função que estava faltando para criar o retriever
             retriever = self._create_knowledge_base(stock_data, purchase_history, employee_data)
             if not retriever:
                 return {"error": "Não foi possível criar a base de conhecimento a partir dos dados."}
 
-            # Template do Prompt para guiar a IA a montar o relatório
+            # Template do Prompt para guiar a IA
             prompt_template = """
             Você é um especialista sênior em Segurança do Trabalho e Gestão de Estoque, responsável por criar o "Relatório de Custeio SSMAS BAERI".
             Use os "Fatos Relevantes" extraídos da base de dados para responder à pergunta.
@@ -307,31 +308,16 @@ class PDFQA:
             # A "pergunta" que guia a IA a montar o relatório no formato desejado
             question = """
             Com base nos fatos fornecidos, gere o "Relatório de Custeio SSMAS BAERI" completo para o próximo ano.
-
             O relatório deve ter a seguinte estrutura em Markdown:
-
-            1.  **Título Principal:** `## Relatório de Custeio SSMAS BAERI`
-            
-            2.  **Seção "Totais por Categoria":**
-                - Crie uma tabela com as colunas `Categoria` e `Total (R$)`.
-                - Calcule e preencha o valor total para as categorias `EPI` e `Uniforme`. Se houver itens de `Serviço` ou `SCI`, inclua-os também.
-            
-            3.  **Seção "Cálculo Especial para Uniformes":**
-                - Apresente os cálculos detalhados para o custeio de uniformes, como no exemplo de referência.
-            
-            4.  **Seção "Pares de uniformes por tamanho e gênero":**
-                - Use os fatos da planilha de funcionários para listar a quantidade necessária de cada item por gênero e tamanho.
-            
-            5.  **Seção "Lista Detalhada de Itens":**
-                - Crie uma tabela detalhada com as colunas `Descrição`, `Quantidade`, `Categoria`, `Valor Unit.`, `CA`.
-                - Para cada item (EPI, Uniforme, etc.), determine a quantidade anual necessária. Para uniformes, considere a necessidade de cada funcionário. Para outros EPIs, use o consumo histórico e o bom senso para uma previsão anual.
-                - Preencha todas as colunas com os dados relevantes encontrados nos fatos.
-
-            **Seja preciso nos cálculos e siga a estrutura do relatório de referência o mais fielmente possível.**
+            1. Título Principal: `## Relatório de Custeio SSMAS BAERI`
+            2. Seção "Totais por Categoria": Crie uma tabela com `Categoria` e `Total (R$)`. Calcule e preencha os valores para `EPI` e `Uniforme`.
+            3. Seção "Pares de uniformes por tamanho e gênero": Use os fatos da planilha de funcionários para listar a quantidade necessária de cada item por gênero e tamanho.
+            4. Seção "Lista Detalhada de Itens": Crie uma tabela com `Descrição`, `Quantidade`, `Categoria`, `Valor Unit.`, `CA`. Para cada item, determine a quantidade anual necessária e preencha todas as colunas com os dados relevantes encontrados nos fatos.
+            Seja preciso nos cálculos e siga a estrutura do relatório de referência o mais fielmente possível.
             """
             
             st.info("IA está consultando a base de conhecimento e gerando o relatório de custeio...")
-            response = qa_chain({"query": question})
+            response = qa_chain.invoke({"query": question}) # Use .invoke() para LangChain
             final_report = response.get("result", "Não foi possível gerar a análise.")
 
             st.success("Relatório de Custeio gerado com sucesso!")
@@ -341,6 +327,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
