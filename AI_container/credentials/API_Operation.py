@@ -224,18 +224,18 @@ class PDFQA:
 
     
     
-    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, budget_target=180000, forecast_months=12):
+    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, employee_data, budget_target=200000, forecast_months=12):
         """
-        Gera uma previsão de compra anual otimizada para uma meta orçamentária.
+        Gera uma previsão de compra anual otimizada, considerando todas as fontes de dados.
         """
         try:
             st.info("Iniciando a geração da previsão de compras anual...")
             
-            # --- 1. Preparação e Cálculos Precisos em Python ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
             if not employee_data: return {"error": "Dados de funcionários não carregados."}
             
+            # --- 1. Preparação dos Dados ---
             df_usage = pd.DataFrame(usage_history)
             df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
             df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0)
@@ -250,7 +250,7 @@ class PDFQA:
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
-    
+
             # --- 2. CÁLCULO DA NECESSIDADE DIRETA (UNIFORMES E CALÇADOS) ---
             st.info("Calculando necessidade de uniformes e calçados...")
             needs_from_employees = {}
@@ -282,7 +282,7 @@ class PDFQA:
                 avg_monthly_consumption = total_consumption / num_months
                 for epi_name, avg_consumption in avg_monthly_consumption.items():
                     needs_from_consumption[epi_name] = np.ceil(avg_consumption * forecast_months)
-    
+
             # --- 4. UNIFICAÇÃO E REGRAS DE NEGÓCIO ---
             st.info("Unificando previsões e aplicando regras...")
             total_projected_needs = needs_from_employees.copy()
@@ -298,7 +298,6 @@ class PDFQA:
                         "Necessidade Ideal (12m)": int(needed_qty),
                         "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0.0)
                     })
-    
             if not final_forecast:
                 return {"report": "## Previsão Anual\n\nEstoque atual é suficiente. Nenhuma compra recomendada."}
             df_forecast = pd.DataFrame(final_forecast)
@@ -349,6 +348,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
