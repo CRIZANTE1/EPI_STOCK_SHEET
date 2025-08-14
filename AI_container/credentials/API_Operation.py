@@ -16,8 +16,21 @@ from datetime import datetime, timedelta
 class PDFQA:
     def __init__(self):
         load_api()  
-        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        self.model = genai.GenerativeModel('gemini-2.5-pro')
         self.embedding_model = 'models/embedding-001'
+        
+    @staticmethod
+    def clean_monetary_value(value):
+        if pd.isna(value):
+            return 0.0
+        s = str(value).strip()
+        if not s:
+            return 0.0
+        s = s.replace('.', '').replace(',', '.')
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return 0.0
 
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
@@ -203,18 +216,7 @@ class PDFQA:
                 "timestamp": time.time()
             }
 
-    def clean_monetary_value(value):
-        if pd.isna(value):
-            return 0.0
-        s = str(value).strip()
-        if not s:
-            return 0.0
-        # Remove pontos de milhar e substitui a vírgula decimal por ponto
-        s = s.replace('.', '').replace(',', '.')
-        try:
-            return float(s)
-        except (ValueError, TypeError):
-            return 0.0
+    
     
     def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
         """
@@ -323,6 +325,7 @@ class PDFQA:
 
 
    
+
 
 
 
