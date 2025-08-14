@@ -80,69 +80,55 @@ def ai_recommendations_page():
                     st.markdown("---")
 
     with tab2:
-            st.subheader("Previsão de Compras Anual (Análise Completa por IA)")
-            st.write("Esta ferramenta envia todos os dados (estoque, saídas, entradas, funcionários) para a IA gerar uma previsão anual completa e justificada.")
+        st.subheader("Relatório de Custeio Anual (Análise Completa com IA e Embeddings)")
+        st.write("Esta ferramenta utiliza todos os dados da empresa e a técnica de RAG para gerar um relatório de custeio detalhado, similar ao modelo de referência.")
 
-            if st.button("Gerar Previsão Anual Completa"):
-                # O spinner deve envolver toda a operação, incluindo a atualização do session_state
-                with st.spinner("Aguarde... A IA está analisando todo o histórico para gerar a previsão..."):
-                    
-                    # Chama a função que faz todo o trabalho pesado
-                    forecast_result = ai_engine.generate_comprehensive_annual_forecast(
-                        stock_data,
-                        purchase_history,
-                        usage_history,
-                        employee_data
-                    )
-                    
-                    # Atualiza o estado da sessão DENTRO do spinner
-                    st.session_state.latest_forecast_result = forecast_result
-                    
-                    # Inicializa o histórico se não existir
-                    if 'forecast_history' not in st.session_state:
-                        st.session_state.forecast_history = []
-                    
-                    # Salva o resultado completo no histórico
-                    st.session_state.forecast_history.append({
-                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "result": forecast_result 
-                    })
-            
-
-            if 'latest_forecast_result' in st.session_state:
-                result = st.session_state.latest_forecast_result
+        if st.button("Gerar Relatório de Custeio Completo"):
+            with st.spinner("IA criando e consultando a base de conhecimento (embeddings)... Este processo pode levar um momento."):
                 
-                st.markdown("---") # Separador visual
-
-                # Verifica se a IA retornou um erro
-                if "error" in result:
-                    st.error(result["error"])
-                else:
-                    report_text = result.get("report", "Nenhum relatório gerado.")
-                    
-                    # Exibe o relatório completo gerado pela IA
-                    st.markdown(report_text)
-                    
-                    # Botão de Download
+                # Chama a nova função RAG que faz todo o trabalho
+                report_result = ai_engine.generate_costing_report(
+                    stock_data,
+                    purchase_history,
+                    usage_history,
+                    employee_data
+                )
+                
+                st.session_state.latest_costing_report = report_result
+                
+                if 'costing_report_history' not in st.session_state:
+                    st.session_state.costing_report_history = []
+                st.session_state.costing_report_history.append({
+                    "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                    "result": report_result 
+                })
+        
+        if 'latest_costing_report' in st.session_state:
+            result = st.session_state.latest_costing_report
+            st.markdown("---")
+            
+            if "error" in result:
+                st.error(result["error"])
+            else:
+                report_text = result.get("report", "Nenhum relatório gerado.")
+                st.markdown(report_text)
+                
+                st.markdown("---")
+                pdf_buffer = create_forecast_pdf_from_report(report_text)
+                st.download_button(
+                    label="📥 Baixar Relatório de Custeio em PDF",
+                    data=pdf_buffer,
+                    file_name=f"Relatorio_Custeio_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                    mime="application/pdf"
+                )
+        
+        if 'costing_report_history' in st.session_state and st.session_state.costing_report_history:
+            with st.expander("Ver Histórico de Relatórios de Custeio"):
+                for rec in reversed(st.session_state.costing_report_history):
+                    st.markdown(f"**Relatório de {rec['timestamp']}**")
+                    history_result = rec.get("result", {})
+                    if "error" in history_result:
+                        st.error(history_result["error"])
+                    else:
+                        st.markdown(history_result.get("report", "Relatório não disponível."))
                     st.markdown("---")
-                    pdf_buffer = create_forecast_pdf_from_report(report_text)
-                    st.download_button(
-                        label="📥 Baixar Previsão em PDF",
-                        data=pdf_buffer,
-                        file_name=f"Previsao_Anual_EPIs_{datetime.now().strftime('%Y-%m-%d')}.pdf",
-                        mime="application/pdf"
-                    )
- 
-            if 'forecast_history' in st.session_state and st.session_state.forecast_history:
-                with st.expander("Ver Histórico de Previsões Geradas"):
-                    for rec in reversed(st.session_state.forecast_history):
-                        st.markdown(f"**Previsão de {rec['timestamp']}**")
-                        
-                        history_result = rec.get("result", {})
-                        
-                        if "error" in history_result:
-                            st.error(history_result["error"])
-                        else:
-                            st.markdown(history_result.get("report", "Relatório não disponível."))
-                        
-                        st.markdown("---")
