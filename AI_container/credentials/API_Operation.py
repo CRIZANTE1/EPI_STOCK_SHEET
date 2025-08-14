@@ -21,12 +21,14 @@ class PDFQA:
         
     @staticmethod
     def clean_monetary_value(value):
-        if pd.isna(value):
+        if pd.isna(value) or value == '':
             return 0.0
+        
         s = str(value).strip()
-        if not s:
-            return 0.0
-        s = s.replace('.', '').replace(',', '.')
+        
+        if ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+
         try:
             return float(s)
         except (ValueError, TypeError):
@@ -321,6 +323,7 @@ class PDFQA:
 
 
    
+
 
 
 
