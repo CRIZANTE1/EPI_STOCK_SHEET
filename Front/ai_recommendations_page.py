@@ -80,21 +80,17 @@ def ai_recommendations_page():
                     st.markdown("---")
 
     with tab2:
-        st.subheader("Previsão de Compras Anual com Otimização de Orçamento")
-        st.write("Esta ferramenta usa o histórico completo, a necessidade dos funcionários e uma meta orçamentária para criar uma lista de compras inteligente.")
-        
-        budget_target = st.number_input("Defina a meta orçamentária (R$):", min_value=1000, value=200000, step=1000)
+            st.subheader("Previsão de Compras Anual (Análise Completa por IA)")
+            st.write("Esta ferramenta envia todos os dados (estoque, saídas, entradas, funcionários) para a IA gerar uma previsão anual completa e justificada.")
 
-        if st.button("Gerar Previsão Anual Otimizada"):
-            with st.spinner("IA analisando todos os dados e otimizando para o orçamento..."):
-                forecast_result = ai_engine.generate_annual_forecast(
-                    usage_history,
-                    purchase_history,
-                    stock_data,
-                    employee_data,
-                    budget_target=budget_target,
-                    forecast_months=12
-                )
+            if st.button("Gerar Previsão Anual Completa"):
+                with st.spinner("IA analisando todos os dados para gerar a previsão..."):
+                        forecast_result = ai_engine.generate_comprehensive_annual_forecast(
+                        stock_data,
+                        purchase_history,
+                        usage_history,
+                        employee_data
+                    )
                 st.session_state.latest_forecast_result = forecast_result
                 if 'forecast_history' not in st.session_state:
                     st.session_state.forecast_history = []
@@ -132,6 +128,7 @@ def ai_recommendations_page():
                     else:
                         st.markdown(history_result.get("report", "Relatório não disponível."))
                     st.markdown("---")
+
 
 
 
