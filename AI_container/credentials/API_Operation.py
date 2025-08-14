@@ -308,27 +308,48 @@ class PDFQA:
                 return {"error": "A IA não conseguiu gerar a lista de compras (bloqueio de segurança)."}
 
             # --- 4. Processamento em Python para Recalcular o Custo Final ---
-            st.info("Recalculando custo total com base nas recomendações da IA...")
-            final_report = "### Lista de Compras Anual Recomendada\n\n"
+            st.info("Recalculando custo final com base nas recomendações da IA...")
+        
             try:
-                df_recommended = pd.read_csv(StringIO(recommended_table_md.replace('<br>', ' ')), sep='|').dropna(axis=1, how='all').iloc[1:]
-                df_recommended.columns = [col.strip() for col in df_recommended.columns]
-                df_recommended['EPI'] = df_recommended['EPI'].str.strip()
-                df_recommended['Qtd. a Comprar (Recomendado)'] = pd.to_numeric(df_recommended['Qtd. a Comprar (Recomendado)'])
+                # Encontra todas as linhas da tabela no texto markdown
+                table_lines = [line.strip() for line in recommended_table_md.strip().split('\n') if '|' in line]
+                
+                # Ignora a linha de separador (ex: |---|---|)
+                data_lines = [line for line in table_lines if not re.match(r'^\s*\|?\s*:?-+:?\s*\|', line)]
+                
+                header = [h.strip() for h in data_lines[0].split('|') if h.strip()]
+                
+                parsed_data = []
+                for line in data_lines[1:]:
+                    values = [v.strip() for v in line.split('|') if v.strip()]
+                    if len(values) == len(header):
+                        parsed_data.append(dict(zip(header, values)))
+    
+                if not parsed_data:
+                    raise ValueError("Nenhuma linha de dados válida encontrada na tabela da IA.")
+    
+                df_recommended = pd.DataFrame(parsed_data)
+                df_recommended['Qtd. a Comprar (Recomendado)'] = pd.to_numeric(df_recommended['Qtd. a Comprar (Recomendado)'], errors='coerce').fillna(0)
+                
+                # Mapeia os custos e calcula o total
                 df_recommended['Custo Unit. (R$)'] = df_recommended['EPI'].map(unit_costs)
+                df_recommended.fillna({'Custo Unit. (R$)': 0}, inplace=True) # Garante que não haja NaN
                 df_recommended['Custo Total (R$)'] = df_recommended['Qtd. a Comprar (Recomendado)'] * df_recommended['Custo Unit. (R$)']
                 
                 final_total_cost = df_recommended['Custo Total (R$)'].sum()
                 formatted_total_cost = '{:_.2f}'.format(final_total_cost).replace('.', ',').replace('_', '.')
                 
+                report_title = "### Lista de Compras Anual Recomendada"
                 report_subtitle = f"#### Orçamento Total Estimado: R$ {formatted_total_cost}"
-                final_report += f"{report_subtitle}\n\n{recommended_table_md}"
-            except Exception:
-                final_report += "*(Não foi possível calcular o custo final a partir da recomendação da IA)*\n\n" + recommended_table_md
-
+                final_report = f"{report_title}\n{report_subtitle}\n\n{recommended_table_md}"
+                
+            except Exception as e:
+                logging.error(f"Erro ao processar a tabela da IA: {e}")
+                final_report = "### Lista de Compras Anual Recomendada\n\n*(Ocorreu um erro ao processar a tabela da IA para calcular o custo final)*\n\n" + recommended_table_md
+    
             st.success("Previsão de compras gerada com sucesso!")
             return {"report": final_report, "data": df_forecast}
-
+    
         except Exception as e:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
