@@ -5,21 +5,17 @@ import sys
 import os
 from io import StringIO
 
-# Ajuste o caminho se necessário, mas este deve funcionar
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from End.Operations import SheetOperations
-from API_Operation import PDFQA
+from AI_container.credentials.API_Operation import PDFQA
 from Utils.pdf_generator import create_forecast_pdf_from_report
 
 def ai_recommendations_page():
     st.title("Análise por Inteligência Artificial 🤖")
     
-    # Inicializa as classes de operação
     ai_engine = PDFQA()
     sheet_operations = SheetOperations()
     
-    # --- CARREGAMENTO DE DADOS NO INÍCIO ---
-    # Carrega todos os dados necessários uma vez para toda a página
     @st.cache_data(ttl=600)
     def load_all_data():
         stock_data_raw = sheet_operations.carregar_dados()
@@ -31,15 +27,12 @@ def ai_recommendations_page():
     if not stock_data_raw or len(stock_data_raw) < 2:
         st.error("Não foi possível carregar a planilha de estoque ou ela está vazia."); return
     
-    # Se os dados dos funcionários não forem carregados, exibe um aviso mas continua
     if not employee_data:
-        st.warning("Não foi possível carregar os dados dos funcionários. Algumas análises podem ser limitadas.")
+        st.warning("Dados de funcionários não carregados. Análises podem ser limitadas.")
         
-    # --- PREPARAÇÃO DOS DADOS (disponível para ambas as abas) ---
     df = pd.DataFrame(stock_data_raw[1:], columns=stock_data_raw[0])
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
-    # Usa a função de limpeza de valor da classe, que é mais robusta
     df['value'] = df['value'].apply(PDFQA.clean_monetary_value)
     df['transaction_type'] = df['transaction_type'].str.lower().str.strip()
 
@@ -52,14 +45,12 @@ def ai_recommendations_page():
     purchase_history = df[df['transaction_type'] == 'entrada'].sort_values(by='date', ascending=False).to_dict('records')
     usage_history = df[df['transaction_type'] == 'saída'].sort_values(by='date', ascending=False).to_dict('records')
     
-    # --- Abas para as Diferentes Análises de IA ---
     tab1, tab2 = st.tabs(["Recomendações de Compra (Análise Geral)", "Previsão Orçamentária Anual (Otimizada)"])
 
     with tab1:
         st.subheader("Análise Rápida de Estoque e Sugestões de Compra")
         if st.button("Gerar Recomendações Gerais"):
             with st.spinner("Analisando estoque e consumo..."):
-                # Agora 'employee_data' está sempre disponível aqui
                 recommendations = ai_engine.stock_analysis(
                     stock_data,
                     purchase_history,
@@ -70,10 +61,23 @@ def ai_recommendations_page():
                     st.error(recommendations["error"])
                 else:
                     st.session_state.latest_recommendation = recommendations["recommendations"]
+                    if 'recommendation_history' not in st.session_state:
+                        st.session_state.recommendation_history = []
+                    st.session_state.recommendation_history.append({
+                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                        "recommendations": recommendations["recommendations"]
+                    })
 
         if 'latest_recommendation' in st.session_state:
             st.markdown("### Últimas Recomendações Geradas")
             st.info(st.session_state.latest_recommendation)
+        
+        if 'recommendation_history' in st.session_state and st.session_state.recommendation_history:
+            with st.expander("Ver Histórico de Recomendações"):
+                for rec in reversed(st.session_state.recommendation_history):
+                    st.markdown(f"**Recomendação de {rec['timestamp']}**")
+                    st.markdown(rec["recommendations"])
+                    st.markdown("---")
 
     with tab2:
         st.subheader("Previsão de Compras Anual com Otimização de Orçamento")
@@ -83,7 +87,6 @@ def ai_recommendations_page():
 
         if st.button("Gerar Previsão Anual Otimizada"):
             with st.spinner("IA analisando todos os dados e otimizando para o orçamento..."):
-                # E 'employee_data' também está disponível aqui
                 forecast_result = ai_engine.generate_annual_forecast(
                     usage_history,
                     purchase_history,
@@ -93,6 +96,12 @@ def ai_recommendations_page():
                     forecast_months=12
                 )
                 st.session_state.latest_forecast_result = forecast_result
+                if 'forecast_history' not in st.session_state:
+                    st.session_state.forecast_history = []
+                st.session_state.forecast_history.append({
+                    "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                    "result": forecast_result 
+                })
         
         if 'latest_forecast_result' in st.session_state:
             result = st.session_state.latest_forecast_result
@@ -111,9 +120,18 @@ def ai_recommendations_page():
                     file_name=f"Previsao_Otimizada_{datetime.now().strftime('%Y-%m-%d')}.pdf",
                     mime="application/pdf"
                 )
-
-            
-
+        
+        # ---- BLOCO DE HISTÓRICO RESTAURADO ----
+        if 'forecast_history' in st.session_state and st.session_state.forecast_history:
+            with st.expander("Ver Histórico de Previsões de Compra"):
+                for rec in reversed(st.session_state.forecast_history):
+                    st.markdown(f"**Previsão de {rec['timestamp']}**")
+                    history_result = rec.get("result", {})
+                    if "error" in history_result:
+                        st.error(history_result["error"])
+                    else:
+                        st.markdown(history_result.get("report", "Relatório não disponível."))
+                    st.markdown("---")
 
 
 
