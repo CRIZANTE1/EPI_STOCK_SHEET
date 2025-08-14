@@ -222,12 +222,12 @@ class PDFQA:
     
     def generate_annual_forecast(self, usage_history, purchase_history, stock_data, forecast_months=12):
         """
-        Gera uma previsão de compra anual realista, ajustada pela IA, e retorna os dados para cálculo de custo.
+        Gera uma previsão de compra anual, com quantidades ajustadas pela IA e custo recalculado em Python.
         """
         try:
             st.info("Iniciando a geração da previsão de compras anual...")
             
-            # --- Preparação e Cálculos ---
+            # --- 1. Preparação e Cálculos Matemáticos ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
             df_usage = pd.DataFrame(usage_history)
@@ -244,11 +244,14 @@ class PDFQA:
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
             if df_usage.empty: return {"error": "Não há dados de consumo válidos."}
-            num_months_in_data = (df_usage['date'].max() - df_usage['date'].min()).days / 30.44
-            if num_months_in_data < 1: num_months_in_data = 1
-            total_consumption_period = df_usage.groupby('epi_name')['quantity'].sum()
-            avg_monthly_consumption = total_consumption_period / num_months_in_data
-
+            
+            # Lógica de consumo aprimorada para incluir todos os meses
+            df_usage = df_usage.set_index('date')
+            # Pega o consumo mensal de cada item
+            monthly_consumption = df_usage.groupby('epi_name').resample('M')['quantity'].sum()
+            # Calcula a média mensal APENAS para os meses em que houve consumo
+            avg_monthly_consumption = monthly_consumption.groupby('epi_name').apply(lambda x: x[x > 0].mean()).fillna(0)
+            
             forecast = []
             for epi_name, avg_consumption in avg_monthly_consumption.items():
                 projected_qty = np.ceil(avg_consumption * forecast_months)
@@ -259,57 +262,76 @@ class PDFQA:
                         "EPI": epi_name.strip(),
                         "Consumo Anual Previsto": int(projected_qty),
                         "Estoque Atual": int(current_stock),
-                        "Necessidade de Compra (cálculo)": int(needed_qty),
-                        "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0)
+                        "Necessidade de Compra (cálculo)": int(needed_qty)
                     })
             
             if not forecast:
-                return {"report": "## Previsão Anual de Compras\n\nCom base no consumo histórico, o estoque atual é suficiente para cobrir a demanda do próximo ano. Nenhuma compra é recomendada no momento.", "data": pd.DataFrame()}
-
+                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "data": pd.DataFrame()}
+    
             df_forecast = pd.DataFrame(forecast)
             df_forecast = df_forecast.sort_values(by="Necessidade de Compra (cálculo)", ascending=False)
-            
-            # --- Prompt da IA ---
+    
+            # --- 2. Primeira Chamada à IA para obter a Tabela de Recomendações ---
             st.info("IA está refinando a lista de compras...")
-            prompt = f"""
-            Você é um gestor de estoque de EPIs experiente. A tabela abaixo mostra uma previsão de compra para os próximos 12 meses.
-            Sua tarefa é revisar essa lista e gerar uma **"Lista de Compras Anual Recomendada"** final em formato de tabela Markdown.
-
+            prompt_recommendation = f"""
+            Você é um gestor de estoque de EPIs. A tabela abaixo mostra uma previsão de compra matemática para os próximos 12 meses.
+            Sua tarefa é revisar **TODOS OS ITENS** e gerar uma **"Lista de Compras Anual Recomendada"** em formato de tabela Markdown.
+    
             **Dados Calculados:**
-            {df_forecast[['EPI', 'Consumo Anual Previsto', 'Estoque Atual', 'Necessidade de Compra (cálculo)']].to_markdown(index=False)}
-
-            **Suas Instruções:**
-            1.  Crie uma nova tabela com as colunas: `EPI`, `Qtd. a Comprar (Recomendado)`, `Justificativa`.
-            2.  Para a coluna "Qtd. a Comprar (Recomendado)", ajuste a "Necessidade de Compra (cálculo)" usando bom senso (ex: arredondar para pacotes, adicionar estoque de segurança para itens críticos).
-            3.  Na coluna "Justificativa", explique brevemente o porquê do ajuste. Se não houver ajuste, use "Cálculo direto".
-            4.  Apresente o resultado final em formato de **tabela Markdown**.
-            5.  **Não inclua** as colunas "Consumo Anual Previsto" e "Estoque Atual" na tabela final.
-            6.  Comece sua resposta **diretamente** com o título `### Lista de Compras Anual Recomendada`, sem nenhuma introdução.
+            {df_forecast.to_markdown(index=False)}
+    
+            **Instruções:**
+            1. Crie uma nova tabela com as colunas: `EPI`, `Qtd. a Comprar (Recomendado)`, `Justificativa`.
+            2. Para "Qtd. a Comprar (Recomendado)", ajuste a "Necessidade de Compra (cálculo)" usando bom senso (arredondar, pacotes, estoque de segurança).
+            3. Na "Justificativa", explique o porquê do ajuste (ex: "Ajuste para caixa fechada", "Estoque de segurança"). Se não houver ajuste, use "Cálculo direto".
+            4. **A sua resposta deve conter APENAS a tabela Markdown, sem nenhum outro texto, título ou introdução.**
             """
             
-            # ---- BLOCO DE CÓDIGO RESTAURADO ----
-            response = self.model.generate_content(prompt)
+            response = self.model.generate_content(prompt_recommendation)
             
             try:
-                # A variável 'report_text' é criada aqui
-                report_text = response.text
+                recommended_table_md = response.text
             except ValueError:
-                report_text = "A IA não conseguiu gerar a lista de compras. Motivo provável: bloqueio de segurança. Tente novamente."
-
+                return {"error": "A IA não conseguiu gerar a lista de compras (bloqueio de segurança)."}
+    
+            # --- 3. Processamento em Python para Recalcular o Custo ---
+            st.info("Recalculando custo total com base nas recomendações da IA...")
+            
+            try:
+                # Converte a tabela Markdown retornada pela IA em um DataFrame do Pandas
+                df_recommended = pd.read_csv(StringIO(recommended_table_md), sep='|').dropna(axis=1, how='all').iloc[1:]
+                df_recommended.columns = [col.strip() for col in df_recommended.columns]
+                df_recommended['EPI'] = df_recommended['EPI'].str.strip()
+                df_recommended['Qtd. a Comprar (Recomendado)'] = pd.to_numeric(df_recommended['Qtd. a Comprar (Recomendado)'])
+    
+                # Mapeia os custos unitários para os itens recomendados
+                df_recommended['Custo Unit. (R$)'] = df_recommended['EPI'].map(unit_costs)
+                # Calcula o custo final com base na recomendação da IA
+                df_recommended['Custo Total (R$)'] = df_recommended['Qtd. a Comprar (Recomendado)'] * df_recommended['Custo Unit. (R$)']
+                
+                final_total_cost = df_recommended['Custo Total (R$)'].sum()
+                formatted_total_cost = '{:_.2f}'.format(final_total_cost).replace('.', ',').replace('_', '.')
+                
+                # Monta o relatório final
+                report_title = "### Lista de Compras Anual Recomendada"
+                report_subtitle = f"#### Orçamento Total Estimado: R$ {formatted_total_cost}"
+                final_report = f"{report_title}\n{report_subtitle}\n\n{recommended_table_md}"
+                
+            except Exception as e:
+                logging.error(f"Erro ao processar a tabela da IA: {e}")
+                # Se falhar ao processar a tabela da IA, retorna o relatório original sem o custo
+                final_report = "### Lista de Compras Anual Recomendada\n\n*(Não foi possível calcular o custo final a partir da recomendação da IA)*\n\n" + recommended_table_md
+    
             st.success("Previsão de compras gerada com sucesso!")
-            # Agora a variável 'report_text' existe e pode ser retornada
-            return {"report": report_text, "data": df_forecast}
-
+            return {"report": final_report, "data": df_forecast} # Retorna o relatório final
+    
         except Exception as e:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
-           
-
-
-
 
    
+
 
 
 
