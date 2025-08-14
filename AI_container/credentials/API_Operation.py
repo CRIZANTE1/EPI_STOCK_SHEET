@@ -283,7 +283,7 @@ class PDFQA:
             Sua tarefa é revisar essa lista e gerar uma **"Lista de Compras Anual Recomendada"** final.
 
             **Dados Calculados:**
-            {df_forecast.to_markdown(index=False)}
+            {df_forecast[['EPI', 'Consumo Anual Previsto', 'Estoque Atual', 'Necessidade de Compra (cálculo)']].to_markdown(index=False)}
 
             **Suas Instruções:**
             1.  **Analise a "Necessidade de Compra (cálculo)"** para cada item.
@@ -307,7 +307,7 @@ class PDFQA:
                 final_report = "A IA não conseguiu gerar a lista de compras. Motivo provável: bloqueio de segurança. Tente novamente."
 
             st.success("Previsão de compras gerada com sucesso!")
-            return {"report": final_report}
+            return {"report": report_text, "data": df_forecast}
 
         except Exception as e:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
@@ -319,6 +319,7 @@ class PDFQA:
 
 
    
+
 
 
 
