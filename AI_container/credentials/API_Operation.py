@@ -11,6 +11,7 @@ import os
 import pandas as pd
 import logging
 from End.Operations import SheetOperations
+from datetime import datetime, timedelta
 
 class PDFQA:
     def __init__(self):
@@ -222,7 +223,6 @@ class PDFQA:
 
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-            # Limpa e converte o valor para numérico
             df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
             df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
             df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
@@ -230,22 +230,23 @@ class PDFQA:
 
             # --- 2. Calcular Custo Unitário Mais Recente ---
             st.info("Calculando custos unitários mais recentes...")
-            # Calcula o custo unitário em cada compra
-            df_purchase = df_purchase[df_purchase['quantity'] > 0]
+            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            # Pega o custo unitário da compra mais recente de cada EPI
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
 
             # --- 3. Calcular Consumo Médio Mensal ---
             st.info("Analisando consumo histórico mensal...")
-            # Filtra dados do último ano para uma previsão mais relevante
+            # A linha que causava o erro agora funcionará
             one_year_ago = datetime.now() - timedelta(days=365)
             df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
             
-            # Agrupa por mês e por EPI
-            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M', on='date')['quantity'].sum()
-            # Calcula a média mensal para cada EPI
+            if df_usage_recent.empty:
+                return {"error": "Não há dados de consumo no último ano para gerar uma previsão."}
+            
+            # Resample agora pode ser usado com segurança
+            df_usage_recent = df_usage_recent.set_index('date')
+            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M')['quantity'].sum()
             avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
 
             # --- 4. Gerar a Previsão ---
@@ -254,25 +255,25 @@ class PDFQA:
             total_forecast_cost = 0
             
             for epi_name, avg_consumption in avg_monthly_consumption.items():
-                projected_qty = np.ceil(avg_consumption * forecast_months) # Arredonda para cima
-                unit_cost = unit_costs.get(epi_name, 0) # Pega o custo, ou 0 se não houver registro de compra
+                projected_qty = np.ceil(avg_consumption * forecast_months)
+                unit_cost = unit_costs.get(epi_name, 0)
                 projected_cost = projected_qty * unit_cost
                 total_forecast_cost += projected_cost
                 
-                forecast.append({
-                    "EPI": epi_name,
-                    "Quantidade Prevista": int(projected_qty),
-                    "Custo Unitário (R$)": f"{unit_cost:.2f}",
-                    "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
-                })
+                if projected_qty > 0: # Adiciona à previsão apenas se a quantidade for maior que zero
+                    forecast.append({
+                        "EPI": epi_name,
+                        "Quantidade Prevista": int(projected_qty),
+                        "Custo Unitário (R$)": f"{unit_cost:.2f}",
+                        "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
+                    })
             
-            # Converte a previsão para um DataFrame para formatar para a IA
             df_forecast = pd.DataFrame(forecast)
 
             # --- 5. Montar o Prompt para a IA ---
             st.info("Enviando dados para a IA gerar o relatório...")
             prompt = f"""
-            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre que foram calculados, gere um relatório orçamentário formal.
+            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre, gere um relatório orçamentário formal.
 
             Dados da Previsão Calculada:
             {df_forecast.to_string(index=False)}
@@ -282,10 +283,9 @@ class PDFQA:
             O relatório deve conter:
             1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
             2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
-            3.  **Recomendações Estratégicas:** Com base na tabela, forneça duas recomendações. Por exemplo, sugira negociar preços para itens de alto custo ou revisar a frequência de troca de itens de alto volume. Seja direto e prático.
+            3.  **Recomendações Estratégicas:** Forneça duas recomendações breves para otimização de custos (ex: negociar preços de itens caros, revisar frequência de troca, etc.).
             """
-
-            # --- 6. Chamar a IA ---
+            
             response = self.model.generate_content(prompt)
             st.success("Relatório de previsão orçamentária gerado com sucesso!")
             return {"report": response.text}
@@ -295,13 +295,13 @@ class PDFQA:
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
 
-
    
 
 
 
 
    
+
 
 
 
