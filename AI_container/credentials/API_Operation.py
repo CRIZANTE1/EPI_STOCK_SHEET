@@ -318,6 +318,7 @@ class PDFQA:
             - Crie uma tabela com as colunas: `EPI`, `Qtd. a Comprar`, `Custo Unit. (R$)`, `Custo Total (R$)`.
             - Para cada EPI, determine a `Qtd. a Comprar` para o próximo ano.
             - Para Uniformes e Calçados, use o resumo dos funcionários e a regra de troca.
+            - Para Itens que o estoque for zero a quantidade mínima a ser adquirida é 10
             - Para outros EPIs, use o resumo de consumo.
             - **Subtraia o Estoque Atual** da necessidade anual para encontrar a quantidade a comprar.
             - Aplique a regra de estoque mínimo.
@@ -345,6 +346,7 @@ class PDFQA:
             st.error(f"Erro ao gerar análise de estoque: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
