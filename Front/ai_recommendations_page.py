@@ -112,20 +112,7 @@ def ai_recommendations_page():
                     mime="application/pdf"
                 )
 
-            if 'forecast_history' in st.session_state and st.session_state.forecast_history:
-                with st.expander("Ver Histórico de Previsões de Compra"):
-                    for rec in reversed(st.session_state.forecast_history):
-                        st.markdown(f"**Previsão de {rec['timestamp']}**")
-                        history_result = rec.get("result", {})
-                        if "error" in history_result:
-                            st.error(history_result["error"])
-                        else:
-                            st.markdown(history_result.get("report", "Relatório não disponível."))
-                        st.markdown("---")
-
-    except Exception as e:
-        st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
-        st.exception(e)
+            
 
 
 
