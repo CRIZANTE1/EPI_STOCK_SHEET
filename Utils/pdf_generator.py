@@ -144,3 +144,62 @@ def create_epi_ficha_html(employee_info, epi_records):
     pdf_bytes = HTML(string=html_template).write_pdf()
     
     return io.BytesIO(pdf_bytes)
+
+
+
+def create_forecast_pdf_from_report(report_markdown_text: str):
+    """
+    Pega um texto em formato Markdown, converte para HTML, aplica um template
+    profissional e gera um PDF.
+    """
+    # 1. Converter o texto do relatório (Markdown) para HTML
+    # A extensão 'tables' é crucial para formatar as tabelas corretamente.
+    html_body = markdown.markdown(report_markdown_text, extensions=['tables'])
+
+    # 2. Obter o logo (reutilizando a função existente)
+    google_drive_file_id = '1AABdw4iGBJ7tsQ7fR1WGTP5cML3Jlfx_'
+    logo_base64_src = get_logo_base64(google_drive_file_id)
+
+    # 3. Definir o CSS para o template do relatório
+    css_styles = """
+        @page { size: A4 portrait; margin: 2cm; }
+        body { font-family: 'Helvetica', sans-serif; font-size: 11pt; color: #333; }
+        .header { display: flex; align-items: center; border-bottom: 2px solid #004a99; padding-bottom: 10px; }
+        .logo { width: 80px; margin-right: 20px; }
+        .header-title { font-size: 24pt; font-weight: bold; color: #004a99; }
+        .content { margin-top: 20px; }
+        h1, h2, h3 { color: #004a99; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 9pt; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: #777; }
+    """
+
+    # 4. Montar o template HTML final
+    html_template = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>{css_styles}</style>
+    </head>
+    <body>
+        <div class="header">
+            <img class="logo" src="{logo_base64_src if logo_base64_src else ''}">
+            <div class="header-title">Relatório de Previsão Orçamentária</div>
+        </div>
+
+        <div class="content">
+            {html_body}
+        </div>
+
+        <div class="footer">
+            Relatório gerado em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} pelo Sistema de Gestão de EPIs.
+        </div>
+    </body>
+    </html>
+    """
+
+    # 5. Converter o HTML para PDF e retornar os bytes
+    pdf_bytes = HTML(string=html_template).write_pdf()
+    return io.BytesIO(pdf_bytes)    
