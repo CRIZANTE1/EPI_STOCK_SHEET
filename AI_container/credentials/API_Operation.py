@@ -11,112 +11,12 @@ import os
 import pandas as pd
 import logging
 from End.Operations import SheetOperations
-from datetime import datetime, timedelta
-from io import StringIO
-import re
-import numpy as np
-import json
-
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-from langchain.docstore.document import Document
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 class PDFQA:
     def __init__(self):
-        self.genai_api = load_api()
-        if not self.genai_api:
-            st.error("Falha ao carregar a API do Google Generative AI.")
-            return
-
-     
-        try:
-            google_api_key = st.secrets["general"]["GOOGLE_API_KEY"]
-        except (KeyError, TypeError):
-            google_api_key = os.getenv('GOOGLE_API_KEY')
-
-        if not google_api_key:
-            st.error("Chave GOOGLE_API_KEY não encontrada. Verifique os secrets ou o .env")
-            return
-            
-        safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-        }
-        
-        # Passa a chave explicitamente
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=google_api_key,
-            temperature=0.1,
-            safety_settings=safety_settings
-        )
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=google_api_key
-        )
-        
-    @staticmethod
-    def clean_monetary_value(value):
-        if pd.isna(value) or value == '':
-            return 0.0
-        
-        s = str(value).strip()
-        
-        if ',' in s:
-            s = s.replace('.', '').replace(',', '.')
-
-        try:
-            return float(s)
-        except (ValueError, TypeError):
-            return 0.0
-
-    def _create_knowledge_base(self, stock_data, purchase_history, employee_data):
-        """
-        Cria uma base de conhecimento vetorial a partir de todos os dados da empresa.
-        """
-        st.info("Criando base de conhecimento vetorial (embeddings)...")
-        documents = []
-
-        # 1. Fatos sobre Custo e Descrição dos Itens
-        df_purchase = pd.DataFrame(purchase_history)
-        df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-        df_purchase['value'] = df_purchase['value'].apply(self.clean_monetary_value)
-        df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(1)
-        df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
-        df_purchase.dropna(subset=['date', 'value', 'quantity'], inplace=True)
-        df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-        latest_costs_df = df_purchase.sort_values('date', ascending=False).drop_duplicates('epi_name', keep='first')
-        for _, row in latest_costs_df.iterrows():
-            doc_content = f"Item: '{row['epi_name']}', Categoria: EPI, Custo Unitário: R${row['unit_cost']:.2f}, CA: {row.get('CA', 'N/A')}"
-            documents.append(Document(page_content=doc_content))
-
-        # 2. Fatos sobre Necessidades dos Funcionários
-        df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
-        uniform_needs_str = df_employees[['Empregado', 'Tamanho Camisa Manga Comprida', 'Tamanho Calça', 'Tamanho do calçado']].to_string(index=False)
-        documents.append(Document(page_content=f"Necessidades de Uniformes por Funcionário:\n{uniform_needs_str}"))
-        total_calcas = pd.to_numeric(df_employees['Quantidade de Calças'], errors='coerce').sum()
-        documents.append(Document(page_content=f"Fato de Necessidade: A necessidade total de calças para todos os funcionários é de {total_calcas} unidades."))
-        total_calcados = pd.to_numeric(df_employees['Quantidade de Calçado'], errors='coerce').sum()
-        documents.append(Document(page_content=f"Fato de Necessidade: A necessidade total de calçados para todos os funcionários é de {total_calcados} unidades."))
-
-
-        # 3. Fatos sobre Estoque Atual
-        df_stock = pd.DataFrame(list(stock_data.items()), columns=['EPI', 'Estoque_Atual'])
-        stock_str = df_stock.to_string(index=False)
-        documents.append(Document(page_content=f"Estoque Atual de Itens:\n{stock_str}"))
-
-        if not documents:
-            return None
-        # Usa FAISS para criar o banco de dados vetorial
-        vector_store = FAISS.from_documents(documents, self.embeddings)
-        st.success(f"Base de conhecimento criada com {len(documents)} fatos relevantes.")
-        # Retorna um "retriever" que busca os 'k' documentos mais relevantes
-        return vector_store.as_retriever(search_kwargs={"k": 75})
+        load_api()  
+        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        self.embedding_model = 'models/embedding-001'
 
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
@@ -302,64 +202,98 @@ class PDFQA:
                 "timestamp": time.time()
             }
 
-    
-    
-    def generate_costing_report(self, stock_data, purchase_history, usage_history, employee_data):
+    def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
         """
-        Gera o Relatório de Custeio completo usando a abordagem RAG.
+        Gera uma previsão orçamentária para os próximos meses usando IA.
         """
         try:
-            # Chama a função que estava faltando para criar o retriever
-            retriever = self._create_knowledge_base(stock_data, purchase_history, employee_data)
-            if not retriever:
-                return {"error": "Não foi possível criar a base de conhecimento a partir dos dados."}
-
-            # Template do Prompt para guiar a IA
-            prompt_template = """
-            Você é um especialista sênior em Segurança do Trabalho e Gestão de Estoque, responsável por criar o "Relatório de Custeio SSMAS BAERI".
-            Use os "Fatos Relevantes" extraídos da base de dados para responder à pergunta.
-
-            **Fatos Relevantes:**
-            {context}
-
-            **Pergunta:**
-            {question}
-
-            **Sua Resposta (O Relatório Completo em Markdown):**
-            """
-            PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+            st.info("Iniciando a geração da previsão orçamentária...")
             
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=self.llm,
-                chain_type="stuff",
-                retriever=retriever,
-                chain_type_kwargs={"prompt": PROMPT}
-            )
+            if not usage_history:
+                return {"error": "Histórico de uso insuficiente para gerar previsão."}
+            if not purchase_history:
+                return {"error": "Histórico de compras insuficiente para calcular custos."}
 
-            # A "pergunta" que guia a IA a montar o relatório no formato desejado
-            question = """
-            Com base nos fatos fornecidos, gere o "Relatório de Custeio SSMAS BAERI" completo para o próximo ano.
-            O relatório deve ter a seguinte estrutura em Markdown:
-            1. Título Principal: `## Relatório de Custeio SSMAS BAERI`
-            2. Seção "Totais por Categoria": Crie uma tabela com `Categoria` e `Total (R$)`. Calcule e preencha os valores para `EPI` e `Uniforme`.
-            3. Seção "Pares de uniformes por tamanho e gênero": Use os fatos da planilha de funcionários para listar a quantidade necessária de cada item por gênero e tamanho.
-            4. Seção "Lista Detalhada de Itens": Crie uma tabela com `Descrição`, `Quantidade`, `Categoria`, `Valor Unit.`, `CA`. Para cada item, determine a quantidade anual necessária e preencha todas as colunas com os dados relevantes encontrados nos fatos.
-            Seja preciso nos cálculos e siga a estrutura do relatório de referência o mais fielmente possível.
-            """
+            # --- 1. Preparação dos Dados ---
+            df_usage = pd.DataFrame(usage_history)
+            df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
+            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce')
+            df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
+
+            df_purchase = pd.DataFrame(purchase_history)
+            df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
+            # Limpa e converte o valor para numérico
+            df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+            df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
+            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
+            df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
+
+            # --- 2. Calcular Custo Unitário Mais Recente ---
+            st.info("Calculando custos unitários mais recentes...")
+            # Calcula o custo unitário em cada compra
+            df_purchase = df_purchase[df_purchase['quantity'] > 0]
+            df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
+            # Pega o custo unitário da compra mais recente de cada EPI
+            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
+            unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
+
+            # --- 3. Calcular Consumo Médio Mensal ---
+            st.info("Analisando consumo histórico mensal...")
+            # Filtra dados do último ano para uma previsão mais relevante
+            one_year_ago = datetime.now() - timedelta(days=365)
+            df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
             
-            st.info("IA está consultando a base de conhecimento e gerando o relatório de custeio...")
-            response = qa_chain.invoke({"query": question}) # Use .invoke() para LangChain
-            final_report = response.get("result", "Não foi possível gerar a análise.")
+            # Agrupa por mês e por EPI
+            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M', on='date')['quantity'].sum()
+            # Calcula a média mensal para cada EPI
+            avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
 
-            st.success("Relatório de Custeio gerado com sucesso!")
-            return {"report": final_report}
+            # --- 4. Gerar a Previsão ---
+            st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
+            forecast = []
+            total_forecast_cost = 0
+            
+            for epi_name, avg_consumption in avg_monthly_consumption.items():
+                projected_qty = np.ceil(avg_consumption * forecast_months) # Arredonda para cima
+                unit_cost = unit_costs.get(epi_name, 0) # Pega o custo, ou 0 se não houver registro de compra
+                projected_cost = projected_qty * unit_cost
+                total_forecast_cost += projected_cost
+                
+                forecast.append({
+                    "EPI": epi_name,
+                    "Quantidade Prevista": int(projected_qty),
+                    "Custo Unitário (R$)": f"{unit_cost:.2f}",
+                    "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
+                })
+            
+            # Converte a previsão para um DataFrame para formatar para a IA
+            df_forecast = pd.DataFrame(forecast)
+
+            # --- 5. Montar o Prompt para a IA ---
+            st.info("Enviando dados para a IA gerar o relatório...")
+            prompt = f"""
+            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre que foram calculados, gere um relatório orçamentário formal.
+
+            Dados da Previsão Calculada:
+            {df_forecast.to_string(index=False)}
+
+            Custo Total Previsto para o Período: R$ {total_forecast_cost:.2f}
+
+            O relatório deve conter:
+            1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
+            2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
+            3.  **Recomendações Estratégicas:** Com base na tabela, forneça duas recomendações. Por exemplo, sugira negociar preços para itens de alto custo ou revisar a frequência de troca de itens de alto volume. Seja direto e prático.
+            """
+
+            # --- 6. Chamar a IA ---
+            response = self.model.generate_content(prompt)
+            st.success("Relatório de previsão orçamentária gerado com sucesso!")
+            return {"report": response.text}
 
         except Exception as e:
-            st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
+            st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
-
-
 
 
 
