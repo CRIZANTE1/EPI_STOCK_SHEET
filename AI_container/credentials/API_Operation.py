@@ -26,11 +26,21 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 class PDFQA:
     def __init__(self):
-        self.genai = load_api()
-        if not self.genai:
+        self.genai_api = load_api()
+        if not self.genai_api:
             st.error("Falha ao carregar a API do Google Generative AI.")
             return
 
+     
+        try:
+            google_api_key = st.secrets["general"]["GOOGLE_API_KEY"]
+        except (KeyError, TypeError):
+            google_api_key = os.getenv('GOOGLE_API_KEY')
+
+        if not google_api_key:
+            st.error("Chave GOOGLE_API_KEY não encontrada. Verifique os secrets ou o .env")
+            return
+            
         safety_settings = {
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -38,10 +48,17 @@ class PDFQA:
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
         }
         
-        # ---- CORREÇÃO APLICADA AQUI ----
-        # Garante que tanto o LLM quanto o modelo de Embeddings sejam inicializados
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, safety_settings=safety_settings)
-        self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        # Passa a chave explicitamente
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=google_api_key,
+            temperature=0.1,
+            safety_settings=safety_settings
+        )
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=google_api_key
+        )
         
     @staticmethod
     def clean_monetary_value(value):
@@ -341,6 +358,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
