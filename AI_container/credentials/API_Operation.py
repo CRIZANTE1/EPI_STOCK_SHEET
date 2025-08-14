@@ -224,105 +224,109 @@ class PDFQA:
 
     
     
-    def stock_analysis(self, stock_data, purchase_history, usage_history, employee_data):
+    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, budget_target=180000, forecast_months=12):
         """
-        Gera uma análise de estoque completa e uma lista de compras anual robusta.
+        Gera uma previsão de compra anual otimizada para uma meta orçamentária.
         """
         try:
-            st.info("Iniciando análise completa de estoque e necessidades anuais...")
+            st.info("Iniciando a geração da previsão de compras anual...")
             
-            # --- 1. Preparação dos Dados ---
+            # --- 1. Preparação e Cálculos Precisos em Python ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
-            if not employee_data: return {"error": "Dados de funcionários não carregados."}
             
             df_usage = pd.DataFrame(usage_history)
             df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
             df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0)
             df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
-            
-            df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
     
-            # --- 2. Criação do Contexto para a IA ---
-            # Converte os dados em strings formatadas para o prompt
-            stock_data_str = pd.Series(stock_data).to_string()
-            usage_history_str = df_usage[['date', 'epi_name', 'quantity', 'requester']].head(50).to_string(index=False)
+            df_purchase = pd.DataFrame(purchase_history)
+            df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
+            df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
+            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
+            df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
             
-            # Processamento dos dados de funcionários para o prompt
-            employee_summary = {
-                "total_funcionarios": len(df_employees),
-                "distribuicao_tamanhos_calca": df_employees['Tamanho Calça'].value_counts().to_dict(),
-                "distribuicao_tamanhos_camisa": df_employees['Tamanho Camisa Manga Comprida'].value_counts().to_dict(),
-                "distribuicao_tamanhos_calcado": df_employees['Tamanho do calçado'].value_counts().to_dict(),
-                "necessidade_total_calcas": pd.to_numeric(df_employees['Quantidade de Calças'], errors='coerce').sum(),
-                "necessidade_total_calcados": pd.to_numeric(df_employees['Quantidade de Calçado'], errors='coerce').sum()
-            }
-            employee_context_str = json.dumps(employee_summary, indent=2, ensure_ascii=False)
+            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
+            df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
+            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
+            unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
     
-            # --- 3. Prompt Abrangente e Detalhado para a IA ---
-            st.info("Enviando dados consolidados para análise da IA...")
+            if df_usage.empty: return {"error": "Não há dados de consumo válidos."}
+            
+            total_days_in_period = (df_usage['date'].max() - df_usage['date'].min()).days
+            num_months_in_data = total_days_in_period / 30.44
+            if num_months_in_data < 1: num_months_in_data = 1
+    
+            total_consumption_period = df_usage.groupby('epi_name')['quantity'].sum()
+            avg_monthly_consumption = total_consumption_period / num_months_in_data
+    
+            forecast = []
+            for epi_name, avg_consumption in avg_monthly_consumption.items():
+                projected_qty = np.ceil(avg_consumption * forecast_months)
+                current_stock = stock_data.get(epi_name, 0)
+                needed_qty = max(0, projected_qty - current_stock)
+                
+                if needed_qty > 0:
+                    forecast.append({
+                        "EPI": epi_name.strip(),
+                        "Necessidade Ideal (12m)": int(needed_qty),
+                        "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0)
+                    })
+            
+            if not forecast:
+                return {"report": "## Previsão Anual\n\nO estoque atual é suficiente para o próximo ano. Nenhuma compra recomendada."}
+    
+            df_forecast = pd.DataFrame(forecast)
+            df_forecast['Custo Ideal (R$)'] = df_forecast['Necessidade Ideal (12m)'] * df_forecast['Custo Unit. (R$)']
+            df_forecast = df_forecast.sort_values(by="Custo Ideal (R$)", ascending=False)
+            
+            total_ideal_cost = df_forecast['Custo Ideal (R$)'].sum()
+            
+            # --- 2. Prompt de Otimização para a IA ---
+            st.info(f"Custo ideal calculado: R$ {total_ideal_cost:,.2f}. Solicitando otimização da IA para a meta de R$ {budget_target:,.2f}...")
+            
             prompt = f"""
-            **Sua Tarefa:** Você é um especialista em Segurança do Trabalho e Gestão de Estoque. Sua tarefa é realizar uma análise completa dos dados de EPIs e gerar uma **lista de compras anual robusta e justificada**.
+            **Sua Tarefa:** Você é um gestor de compras sênior com a tarefa de otimizar um orçamento de EPIs.
     
-            **Dados Disponíveis:**
+            **Contexto:**
+            - A "Necessidade Ideal" de compra para o próximo ano, calculada com base no consumo, totaliza **R$ {total_ideal_cost:,.2f}**.
+            - Seu orçamento disponível é de **R$ {budget_target:,.2f}**.
+            - Você precisa criar uma **"Lista de Compras Otimizada"** que se ajuste a este orçamento.
     
-            **1. Estoque Atual:**
+            **Dados de Entrada (Necessidade Ideal):**
             ```
-            {stock_data_str}
-            ```
-    
-            **2. Histórico Recente de Saídas (Consumo):**
-            ```
-            {usage_history_str}
+            {df_forecast.to_string(index=False)}
             ```
     
-            **3. Resumo dos Dados dos Funcionários:**
-            ```
-            {employee_context_str}
-            ```
-    
-            **4. Regras de Negócio Importantes:**
-            - **Botinas:** Troca a cada 6 meses, vida útil em estoque de 12 meses.
-            - **Uniformes (Camisas e Calças):** Troca mínima a cada 6 meses.
-            - **Luvas (ex: CA 28011, 42027):** Consumo muito alto, trocas semanais/quinzenais.
-            - **Cintos de Segurança:** Troca programada a cada 6 meses.
-            - **Regra de Estoque Mínimo:** Para qualquer item com estoque atual menor ou igual a 5, a recomendação de compra deve ser de pelo menos 2 unidades a mais do que a necessidade calculada, para criar um estoque de segurança.
-    
-            **Instruções para o Relatório Final:**
-    
-            Com base em **TODOS** os dados acima, gere um relatório em Markdown com as seguintes seções:
-    
-            **1. Itens com Estoque Crítico (≤ 5 unidades):**
-               - Liste todos os itens com estoque baixo ou negativo, mostrando o estoque atual.
-    
-            **2. Análise de Padrões de Consumo:**
-               - Descreva brevemente os principais padrões observados (ex: itens de alta rotatividade, itens de troca periódica, variação por tamanho).
-    
-            **3. Lista de Compras Anual Recomendada:**
-               - Crie uma tabela com as colunas: `EPI`, `Qtd. a Comprar`, `Justificativa`.
-               - Para **Uniformes e Calçados**, use os dados dos funcionários para calcular a necessidade anual (considerando a troca a cada 6 meses, ou seja, 2x a necessidade total).
-               - Para **Consumíveis** (ex: Luvas), calcule a necessidade com base no consumo histórico, projetando para 12 meses.
-               - Para **outros EPIs**, use uma combinação das regras de troca e do consumo.
-               - **Aplique a regra de estoque mínimo** em todos os itens aplicáveis.
-               - A justificativa deve ser clara (ex: "Reposição de estoque crítico + demanda anual", "Baseado na necessidade de 24 funcionários para 2 trocas/ano", "Projeção de consumo + estoque de segurança").
-            
-            **Seja completo, preciso e direto ao ponto.**
+            **Instruções para a Otimização:**
+            1.  **Crie uma nova tabela Markdown** com as colunas: `EPI`, `Qtd. Otimizada`, `Custo Total (R$)`, `Justificativa`.
+            2.  **Ajuste as Quantidades:** Na coluna `Qtd. Otimizada`, reduza a "Necessidade Ideal" para que o custo total final fique o mais próximo possível de R$ {budget_target:,.2f}, sem ultrapassá-lo.
+            3.  **Priorize:** Mantenha 100% da quantidade para itens de segurança críticos (ex: Cintos, Travas Quedas, Luvas Isolantes) e de baixo custo. Reduza a quantidade de itens menos críticos ou que podem ser comprados em lotes menores (ex: comprar para 6 ou 9 meses em vez de 12).
+            4.  **Calcule o Custo Total:** Para cada linha, calcule o `Custo Total (R$)` multiplicando a `Qtd. Otimizada` pelo `Custo Unit. (R$)`.
+            5.  **Justifique:** Na coluna "Justificativa", explique brevemente a decisão (ex: "Compra para 6 meses", "Item crítico - 100% mantido", "Redução para ajuste orçamentário").
+            6.  **Formate a Saída:** Apresente o resultado final no seguinte formato Markdown, e **NADA MAIS**:
+                - Um título: `### Previsão de Compras Anual Otimizada`
+                - Um subtítulo com o novo orçamento total calculado por você (ex: `#### Orçamento Otimizado: R$ 199.850,50`).
+                - A tabela final que você criou.
             """
-    
+            
+            # --- 3. Chamada Única à IA e Retorno Direto ---
             response = self.model.generate_content(prompt)
             
             try:
                 final_report = response.text
             except ValueError:
-                final_report = "A IA não conseguiu gerar a análise, possivelmente devido a um bloqueio de segurança."
+                final_report = "A IA não conseguiu gerar o relatório, possivelmente devido a um bloqueio de segurança."
     
-            st.success("Análise de estoque e recomendações geradas com sucesso!")
-            return {"recommendations": final_report} # Retorna no formato esperado pela página
+            st.success("Previsão de compras otimizada gerada com sucesso!")
+            return {"report": final_report}
     
         except Exception as e:
-            st.error(f"Erro ao gerar análise de estoque: {str(e)}")
+            st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
+
 
 
 
