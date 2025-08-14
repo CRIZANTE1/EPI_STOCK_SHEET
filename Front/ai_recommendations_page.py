@@ -159,3 +159,4 @@ def ai_recommendations_page():
                         st.markdown(rec["report"])
                         st.markdown("---")
 
+
