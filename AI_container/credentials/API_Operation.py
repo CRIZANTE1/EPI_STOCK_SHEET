@@ -225,125 +225,72 @@ class PDFQA:
 
     
     
-    def generate_comprehensive_annual_forecast(self, stock_data, purchase_history, usage_history, employee_data):
+    def generate_costing_report(self, stock_data, purchase_history, usage_history, employee_data):
         """
-        Gera uma análise de estoque completa e uma lista de compras anual robusta,
-        usando dados sumarizados para evitar exceder a cota de tokens.
+        Gera o Relatório de Custeio completo usando a abordagem RAG.
         """
         try:
-            st.info("Iniciando análise completa de estoque e necessidades anuais...")
-            
-            # --- 1. SUMARIZAÇÃO DOS DADOS EM PYTHON ---
-            st.info("Sumarizando históricos de consumo e compras...")
-            
-            if not usage_history: return {"error": "Histórico de uso (saídas) é necessário."}
-            if not purchase_history: return {"error": "Histórico de compras (entradas) é necessário."}
-            if not employee_data: return {"error": "Dados de funcionários são necessários."}
-            
-            # -- Sumarização do Consumo --
-            df_usage = pd.DataFrame(usage_history)
-            df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
-            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0)
-            df_usage.dropna(subset=['date', 'quantity'], inplace=True)
-            total_days = (df_usage['date'].max() - df_usage['date'].min()).days
-            num_months = total_days / 30.44 if total_days > 0 else 1
-            if num_months < 1: num_months = 1
-            consumption_summary = df_usage.groupby('epi_name')['quantity'].sum().reset_index()
-            consumption_summary.rename(columns={'quantity': 'Consumo Total no Período'}, inplace=True)
-            consumption_summary['Consumo Médio Mensal'] = (consumption_summary['Consumo Total no Período'] / num_months).round(2)
-    
-            # -- Sumarização dos Custos --
-            df_purchase = pd.DataFrame(purchase_history)
-            df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-            df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
-            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
-            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
-            df_purchase.dropna(subset=['date', 'value', 'quantity'], inplace=True)
-            df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
-            unit_costs_summary = latest_costs_df[['epi_name', 'unit_cost']]
-            unit_costs_summary.rename(columns={'unit_cost': 'Custo Unitário Recente (R$)'}, inplace=True)
-    
-            # -- Sumarização dos Dados dos Funcionários --
-            df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
-            employee_summary = {
-                "Total de Funcionários": len(df_employees),
-                "Necessidade Total de Calças": pd.to_numeric(df_employees['Quantidade de Calças'], errors='coerce').sum(),
-                "Necessidade Total de Calçados": pd.to_numeric(df_employees['Quantidade de Calçado'], errors='coerce').sum(),
-                "Distribuição de Tamanhos (Calça)": df_employees['Tamanho Calça'].value_counts().to_dict(),
-                "Distribuição de Tamanhos (Calçado)": df_employees['Tamanho do calçado'].value_counts().to_dict()
-            }
-            
-            # --- 2. Preparação do Prompt com Dados Sumarizados ---
-            stock_str = pd.DataFrame(list(stock_data.items()), columns=['EPI', 'Estoque Atual']).to_markdown(index=False)
-            consumption_str = consumption_summary.to_markdown(index=False)
-            costs_str = unit_costs_summary.to_markdown(index=False)
-            employee_str = json.dumps(employee_summary, indent=2, ensure_ascii=False)
-    
-            st.info("Enviando dados sumarizados para análise da IA...")
-            prompt = f"""
-            **Sua Tarefa:** Você é um especialista sênior em Segurança do Trabalho e Gestão de Estoque. Sua tarefa é realizar uma análise completa dos dados sumarizados e gerar uma **"Lista de Compras Anual"** com o respectivo orçamento.
-    
-            **Dados Sumarizados Disponíveis:**
-    
-            **1. Estoque Atual:**
-            ```markdown
-            {stock_str}
-            ```
-    
-            **2. Resumo do Consumo Histórico:**
-            ```markdown
-            {consumption_str}
-            ```
-    
-            **3. Resumo das Necessidades dos Funcionários (para Uniformes e Calçados):**
-            ```json
-            {employee_str}
-            ```
-    
-            **4. Custos Unitários Mais Recentes:**
-            ```markdown
-            {costs_str}
-            ```
-    
-            **5. Regras de Negócio Cruciais:**
-            - **Periodicidade de Troca:** Uniformes e Calçados são trocados a cada 6 meses (ou seja, a necessidade anual é 2x a quantidade listada nos dados dos funcionários).
-            - **Estoque Mínimo de Segurança:** O estoque nunca deve ficar abaixo de 2 unidades. Se a sua previsão de compra resultar em um estoque final menor que 2, ajuste a quantidade.
-    
-            **Instruções para o Relatório Final:**
-    
-            Com base em **TODA a informação sumarizada**, gere um relatório em Markdown com as seguintes seções:
-    
-            **Seção 1: Lista de Compras Anual Recomendada**
-            - Crie uma tabela com as colunas: `EPI`, `Qtd. a Comprar`, `Custo Unit. (R$)`, `Custo Total (R$)`.
-            - Para cada EPI, determine a `Qtd. a Comprar` para o próximo ano.
-            - Para Uniformes e Calçados, use o resumo dos funcionários e a regra de troca.
-            - Para Itens que o estoque for zero a quantidade mínima a ser adquirida é 10
-            - Para outros EPIs, use o resumo de consumo.
-            - **Subtraia o Estoque Atual** da necessidade anual para encontrar a quantidade a comprar.
-            - Aplique a regra de estoque mínimo.
-            - Use a tabela de Custos para encontrar o `Custo Unit. (R$)`.
-            - Calcule o `Custo Total (R$)` para cada linha.
-            - No final da tabela, some tudo e apresente o **"Orçamento Total Previsto"**.
-    
-            **Seção 2: Justificativa da Análise**
-            - Em um parágrafo curto, explique como você chegou a essa lista, mencionando como combinou as diferentes fontes de dados.
-    
-            **Aja como um verdadeiro especialista.**
+            retriever = self._create_knowledge_base(stock_data, purchase_history, employee_data)
+            if not retriever:
+                return {"error": "Não foi possível criar a base de conhecimento a partir dos dados."}
+
+            # Template do Prompt para guiar a IA a montar o relatório
+            prompt_template = """
+            Você é um especialista sênior em Segurança do Trabalho e Gestão de Estoque, responsável por criar o "Relatório de Custeio SSMAS BAERI".
+            Use os "Fatos Relevantes" extraídos da base de dados para responder à pergunta.
+
+            **Fatos Relevantes:**
+            {context}
+
+            **Pergunta:**
+            {question}
+
+            **Sua Resposta (O Relatório Completo em Markdown):**
             """
-    
-            response = self.model.generate_content(prompt)
+            PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
             
-            try:
-                final_report = response.text
-            except ValueError:
-                final_report = "A IA não conseguiu gerar a análise (bloqueio de segurança)."
-    
-            st.success("Análise de estoque e recomendações geradas com sucesso!")
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=self.llm,
+                chain_type="stuff",
+                retriever=retriever,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+
+            # A "pergunta" que guia a IA a montar o relatório no formato desejado
+            question = """
+            Com base nos fatos fornecidos, gere o "Relatório de Custeio SSMAS BAERI" completo para o próximo ano.
+
+            O relatório deve ter a seguinte estrutura em Markdown:
+
+            1.  **Título Principal:** `## Relatório de Custeio SSMAS BAERI`
+            
+            2.  **Seção "Totais por Categoria":**
+                - Crie uma tabela com as colunas `Categoria` e `Total (R$)`.
+                - Calcule e preencha o valor total para as categorias `EPI` e `Uniforme`. Se houver itens de `Serviço` ou `SCI`, inclua-os também.
+            
+            3.  **Seção "Cálculo Especial para Uniformes":**
+                - Apresente os cálculos detalhados para o custeio de uniformes, como no exemplo de referência.
+            
+            4.  **Seção "Pares de uniformes por tamanho e gênero":**
+                - Use os fatos da planilha de funcionários para listar a quantidade necessária de cada item por gênero e tamanho.
+            
+            5.  **Seção "Lista Detalhada de Itens":**
+                - Crie uma tabela detalhada com as colunas `Descrição`, `Quantidade`, `Categoria`, `Valor Unit.`, `CA`.
+                - Para cada item (EPI, Uniforme, etc.), determine a quantidade anual necessária. Para uniformes, considere a necessidade de cada funcionário. Para outros EPIs, use o consumo histórico e o bom senso para uma previsão anual.
+                - Preencha todas as colunas com os dados relevantes encontrados nos fatos.
+
+            **Seja preciso nos cálculos e siga a estrutura do relatório de referência o mais fielmente possível.**
+            """
+            
+            st.info("IA está consultando a base de conhecimento e gerando o relatório de custeio...")
+            response = qa_chain({"query": question})
+            final_report = response.get("result", "Não foi possível gerar a análise.")
+
+            st.success("Relatório de Custeio gerado com sucesso!")
             return {"report": final_report}
-    
+
         except Exception as e:
-            st.error(f"Erro ao gerar análise de estoque: {str(e)}")
+            st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
 
