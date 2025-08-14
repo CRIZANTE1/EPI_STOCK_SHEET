@@ -116,7 +116,7 @@ class PDFQA:
         vector_store = FAISS.from_documents(documents, self.embeddings)
         st.success(f"Base de conhecimento criada com {len(documents)} fatos relevantes.")
         # Retorna um "retriever" que busca os 'k' documentos mais relevantes
-        return vector_store.as_retriever(search_kwargs={"k": 50})
+        return vector_store.as_retriever(search_kwargs={"k": 75})
 
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
@@ -358,6 +358,7 @@ class PDFQA:
             st.error(f"Erro ao gerar relatório com RAG: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
