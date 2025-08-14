@@ -9,7 +9,7 @@ import os
 # Adicionar o diretório pai ao path para import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from End.Operations import SheetOperations
-from API_Operation import PDFQA
+from AI_container.credentials.API_Operation import PDFQA
 # Adicionar a importação da nova função de geração de PDF
 from Utils.pdf_generator import create_forecast_pdf_from_report
 
@@ -152,3 +152,4 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
