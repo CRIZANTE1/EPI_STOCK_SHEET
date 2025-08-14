@@ -222,15 +222,13 @@ class PDFQA:
     
     def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=12):
         """
-        Gera uma previsão orçamentária gerencial para os próximos meses.
+        Gera uma previsão orçamentária gerencial anual.
         """
         try:
-            st.info("Iniciando a geração da previsão orçamentária...")
+            st.info("Iniciando a geração da previsão orçamentária anual...")
             
-            if not usage_history:
-                return {"error": "Histórico de uso insuficiente para gerar previsão."}
-            if not purchase_history:
-                return {"error": "Histórico de compras insuficiente para calcular custos."}
+            if not usage_history: return {"error": "Histórico de uso insuficiente."}
+            if not purchase_history: return {"error": "Histórico de compras insuficiente."}
 
             # Preparação dos Dados
             df_usage = pd.DataFrame(usage_history)
@@ -240,7 +238,7 @@ class PDFQA:
 
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-            # **** CHAMANDO O MÉTODO CORRIGIDO ****
+            # **** CHAMANDO A NOVA FUNÇÃO DE LIMPEZA ****
             df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
             df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
@@ -253,15 +251,12 @@ class PDFQA:
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
 
             # Calcular Consumo Médio
-            st.info("Analisando consumo...")
-            one_year_ago = datetime.now() - timedelta(days=365)
-            df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
-            
-            if df_usage_recent.empty:
-                return {"error": "Não há dados de consumo no último ano para gerar uma previsão."}
-            
-            total_consumption_period = df_usage_recent.groupby('epi_name')['quantity'].sum()
-            avg_monthly_consumption = total_consumption_period / 12
+            st.info("Analisando consumo histórico...")
+            if df_usage.empty: return {"error": "Não há dados de consumo válidos."}
+            num_months_in_data = (df_usage['date'].max() - df_usage['date'].min()).days / 30.44
+            if num_months_in_data < 1: num_months_in_data = 1
+            total_consumption_period = df_usage.groupby('epi_name')['quantity'].sum()
+            avg_monthly_consumption = total_consumption_period / num_months_in_data
 
             # Gerar a Previsão
             st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
@@ -276,42 +271,62 @@ class PDFQA:
                 
                 if projected_qty > 0:
                     forecast.append({
-                        "EPI": epi_name,
-                        "Qtd. Prevista": int(projected_qty),
+                        "EPI": epi_name.strip(), # Limpa espaços em branco do nome do EPI
+                        "Qtd. Prevista (12 meses)": int(projected_qty),
                         "Custo Unit. (R$)": unit_cost,
-                        "Custo Total (R$)": projected_cost
+                        "Custo Total Previsto (R$)": projected_cost
                     })
             
-            if not forecast:
-                return {"error": "Não foi possível gerar a previsão. Verifique os dados de consumo."}
+            if not forecast: return {"error": "Não foi possível gerar a previsão."}
 
             df_forecast = pd.DataFrame(forecast)
-            df_forecast = df_forecast.sort_values(by="Custo Total (R$)", ascending=False)
             
-            df_forecast['Custo Unit. (R$)'] = df_forecast['Custo Unit. (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
-            df_forecast['Custo Total (R$)'] = df_forecast['Custo Total (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
-            
-            formatted_total_cost = '{:_.2f}'.format(total_forecast_cost).replace('.', ',').replace('_', '.')
+            df_forecast = df_forecast.groupby('EPI').agg({
+                'Qtd. Prevista (12 meses)': 'sum',
+                'Custo Unit. (R$)': 'mean', # Pega a média dos custos unitários se houver duplicatas
+                'Custo Total Previsto (R$)': 'sum'
+            }).reset_index()
 
-            # Prompt da IA
-            st.info("Formatando relatório gerencial...")
-            prompt = f"""
+            df_forecast = df_forecast.sort_values(by="Custo Total Previsto (R$)", ascending=False)
+            
+            # Formatação de moeda para exibição
+            df_forecast_display = df_forecast.copy()
+            df_forecast_display['Custo Unit. (R$)'] = df_forecast_display['Custo Unit. (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
+            df_forecast_display['Custo Total Previsto (R$)'] = df_forecast_display['Custo Total Previsto (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
+            
+            formatted_total_cost = '{:_.2f}'.format(df_forecast['Custo Total Previsto (R$)'].sum()).replace('.', ',').replace('_', '.')
+
+            # Prompt para IA
+            st.info("Formatando relatório gerencial com IA...")
+            report_prompt = f"""
             **Instrução Estrita:** Formate os dados a seguir em um relatório Markdown.
-            **Não adicione NENHUM texto, resumo, análise ou recomendação.**
-            **Otimize o custo**
-            Sua saída deve conter APENAS os seguintes elementos, nesta ordem:
-            
-            1.  O título: `### Previsão Orçamentária de EPIs`
-            2.  O subtítulo com o valor total: `#### Orçamento Total Estimado: R$ {formatted_total_cost}`
-            3.  A tabela de previsão exatamente como fornecida abaixo, sem alterações.
+            **Não adicione NENHUM texto extra.**
+            Sua saída deve conter APENAS:
+            1. O título: `### Previsão Orçamentária Anual de EPIs`
+            2. O subtítulo: `#### Orçamento Total Estimado: R$ {formatted_total_cost}`
+            3. A tabela de previsão abaixo.
 
-            **Dados da Tabela de Previsão:**
-            {df_forecast.to_markdown(index=False)}
+            **Dados da Tabela:**
+            {df_forecast_display.to_markdown(index=False)}
             """
             
-            response = self.model.generate_content(prompt)
-            st.success("Relatório gerencial gerado com sucesso!")
-            return {"report": response.text}
+            optimization_prompt = f"""
+            Você é um consultor financeiro. Baseado na tabela abaixo, forneça **três recomendações curtas e acionáveis** para otimizar custos. Foque nos itens de maior impacto.
+
+            **Tabela de Previsão:**
+            {df_forecast.to_string(index=False)}
+
+            **Formato da Resposta:**
+            Comece com o título `### Recomendações para Otimização de Custo` e use bullet points.
+            """
+            
+            report_text = self.model.generate_content(report_prompt).text
+            optimization_text = self.model.generate_content(optimization_prompt).text
+            
+            final_report = f"{report_text}\n\n---\n\n{optimization_text}"
+
+            st.success("Relatório gerencial e recomendações gerados com sucesso!")
+            return {"report": final_report}
 
         except Exception as e:
             st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
@@ -323,6 +338,7 @@ class PDFQA:
 
 
    
+
 
 
 
