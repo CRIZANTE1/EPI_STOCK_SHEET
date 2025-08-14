@@ -205,7 +205,7 @@ class PDFQA:
 
     def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
         """
-        Gera uma previsão orçamentária para os próximos meses usando IA.
+        Gera uma previsão orçamentária gerencial para os próximos meses.
         """
         try:
             st.info("Iniciando a geração da previsão orçamentária...")
@@ -214,43 +214,35 @@ class PDFQA:
                 return {"error": "Histórico de uso insuficiente para gerar previsão."}
             if not purchase_history:
                 return {"error": "Histórico de compras insuficiente para calcular custos."}
-
-            # --- 1. Preparação dos Dados ---
+    
+            # --- Preparação e Cálculos (permanecem os mesmos) ---
             df_usage = pd.DataFrame(usage_history)
             df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
             df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce')
             df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
-
+    
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
             df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
             df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
             df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-
-            # --- 2. Calcular Custo Unitário Mais Recente ---
-            st.info("Calculando custos unitários mais recentes...")
+            
             df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
-
-            # --- 3. Calcular Consumo Médio Mensal ---
-            st.info("Analisando consumo histórico mensal...")
-            # A linha que causava o erro agora funcionará
+    
             one_year_ago = datetime.now() - timedelta(days=365)
             df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
             
             if df_usage_recent.empty:
                 return {"error": "Não há dados de consumo no último ano para gerar uma previsão."}
             
-            # Resample agora pode ser usado com segurança
             df_usage_recent = df_usage_recent.set_index('date')
             monthly_consumption = df_usage_recent.groupby('epi_name').resample('M')['quantity'].sum()
             avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
-
-            # --- 4. Gerar a Previsão ---
-            st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
+            
             forecast = []
             total_forecast_cost = 0
             
@@ -260,47 +252,51 @@ class PDFQA:
                 projected_cost = projected_qty * unit_cost
                 total_forecast_cost += projected_cost
                 
-                if projected_qty > 0: # Adiciona à previsão apenas se a quantidade for maior que zero
+                if projected_qty > 0:
                     forecast.append({
                         "EPI": epi_name,
-                        "Quantidade Prevista": int(projected_qty),
-                        "Custo Unitário (R$)": f"{unit_cost:.2f}",
-                        "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
+                        "Qtd. Prevista": int(projected_qty),
+                        "Custo Unit. (R$)": f"{unit_cost:.2f}",
+                        "Custo Total (R$)": f"{projected_cost:.2f}"
                     })
             
             df_forecast = pd.DataFrame(forecast)
-
-            # --- 5. Montar o Prompt para a IA ---
-            st.info("Enviando dados para a IA gerar o relatório...")
+            # Ordena a tabela pelos itens de maior custo previsto
+            df_forecast = df_forecast.sort_values(by="Custo Total (R$)", ascending=False, key=lambda col: col.astype(float))
+    
+            # --- PROMPT DA IA MODIFICADO: Direto e Gerencial ---
+            st.info("Formatando relatório gerencial...")
             prompt = f"""
-            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre, gere um relatório orçamentário formal.
-
-            Dados da Previsão Calculada:
+            Formate os seguintes dados em um relatório orçamentário gerencial em Markdown.
+    
+            Dados da Previsão:
             {df_forecast.to_string(index=False)}
-
-            Custo Total Previsto para o Período: R$ {total_forecast_cost:.2f}
-
-            O relatório deve conter:
-            1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
-            2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
-            3.  **Recomendações Estratégicas:** Forneça duas recomendações breves para otimização de custos (ex: negociar preços de itens caros, revisar frequência de troca, etc.).
+    
+            Orçamento Total Previsto para o Período: R$ {total_forecast_cost:.2f}
+    
+            O relatório deve ter APENAS:
+            1. Um título principal: "### Previsão Orçamentária de EPIs - Próximo Trimestre"
+            2. Um subtítulo com o valor total: "#### Orçamento Total Estimado: R$ {total_forecast_cost:.2f}"
+            3. A tabela de previsão exatamente como fornecida.
+    
+            Não adicione nenhum texto explicativo, resumo, introdução ou recomendação. Seja direto.
             """
             
             response = self.model.generate_content(prompt)
-            st.success("Relatório de previsão orçamentária gerado com sucesso!")
+            st.success("Relatório gerencial gerado com sucesso!")
             return {"report": response.text}
-
+    
         except Exception as e:
             st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+       
+
+
+
 
    
 
-
-
-
-   
 
 
 
