@@ -105,61 +105,38 @@ def ai_recommendations_page():
                         st.markdown("---")
 
         with tab2:
-            st.subheader("Previsão de Compras Anual com IA")
-            st.write("Esta ferramenta analisa o consumo histórico e o estoque atual para gerar uma lista de compras realista para os próximos 12 meses.")
-
-            if st.button("Gerar Previsão de Compras"):
-                with st.spinner("IA analisando dados para gerar a previsão..."):
+            st.subheader("Previsão de Compras Anual com Otimização de Orçamento")
+            st.write("Esta ferramenta usa o histórico completo, a necessidade dos funcionários e uma meta orçamentária para criar uma lista de compras inteligente.")
+            
+            budget_target = st.number_input("Defina a meta orçamentária (R$):", min_value=1000, value=200000, step=1000)
+    
+            if st.button("Gerar Previsão Anual Otimizada"):
+                with st.spinner("IA analisando todos os dados e otimizando para o orçamento..."):
                     forecast_result = ai_engine.generate_annual_forecast(
                         usage_history,
                         purchase_history,
                         stock_data,
-                        budget_target=180000, # A meta é passada aqui
+                        employee_data,
+                        budget_target=budget_target,
                         forecast_months=12
                     )
                     st.session_state.latest_forecast_result = forecast_result
-                    if 'forecast_history' not in st.session_state:
-                        st.session_state.forecast_history = []
-                    st.session_state.forecast_history.append({
-                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "result": forecast_result 
-                    })
             
             if 'latest_forecast_result' in st.session_state:
                 result = st.session_state.latest_forecast_result
-                
                 if "error" in result:
                     st.error(result["error"])
                 else:
                     report_text = result.get("report", "Nenhum relatório gerado.")
-                    df_data = result.get("data", pd.DataFrame())
-
                     st.markdown("---")
-                    
-                    # ---- BLOCO DE CÁLCULO DE CUSTO CORRIGIDO E PROTEGIDO ----
-                    # Verifica se o DataFrame não está vazio E se as colunas necessárias existem
-                    if not df_data.empty and 'Necessidade de Compra (cálculo)' in df_data.columns and 'Custo Unit. (R$)' in df_data.columns:
-                        # Preenche valores NaN com 0 para evitar erros no cálculo
-                        df_data['Necessidade de Compra (cálculo)'] = df_data['Necessidade de Compra (cálculo)'].fillna(0)
-                        df_data['Custo Unit. (R$)'] = df_data['Custo Unit. (R$)'].fillna(0)
-                        
-                        total_cost = (df_data['Necessidade de Compra (cálculo)'] * df_data['Custo Unit. (R$)']).sum()
-                        
-                        st.metric(
-                            label="Orçamento Total Estimado para Compras",
-                            value=f"R$ {total_cost:,.2f}".replace(',', 'v').replace('.', ',').replace('v', '.')
-                        )
-                    
-                    # Exibe o relatório gerado pela IA
                     st.markdown(report_text)
                     
-                    # Botão de Download
                     st.markdown("---")
                     pdf_buffer = create_forecast_pdf_from_report(report_text)
                     st.download_button(
-                        label="📥 Baixar Relatório em PDF",
+                        label="📥 Baixar Previsão em PDF",
                         data=pdf_buffer,
-                        file_name=f"Previsao_Compras_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                        file_name=f"Previsao_Otimizada_{datetime.now().strftime('%Y-%m-%d')}.pdf",
                         mime="application/pdf"
                     )
 
@@ -177,6 +154,7 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
