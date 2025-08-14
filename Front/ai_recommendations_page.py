@@ -114,6 +114,7 @@ def ai_recommendations_page():
                         usage_history,
                         purchase_history,
                         stock_data,
+                        budget_target=180000, # A meta é passada aqui
                         forecast_months=12
                     )
                     st.session_state.latest_forecast_result = forecast_result
@@ -176,6 +177,7 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
