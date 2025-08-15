@@ -170,3 +170,6 @@ def ai_recommendations_page():
                             st.markdown(history_result.get("report", "Relatório não disponível."))
                         st.markdown("---")
 
+        except Exception as e:
+                st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
+                st.exception(e)
