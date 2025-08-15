@@ -107,58 +107,36 @@ def ai_recommendations_page():
                         st.markdown("---")
 
         with tab2:
-            st.subheader("Previsão Orçamentária Anual (12 Meses)")
-            st.write("Esta ferramenta analisa o consumo histórico, a necessidade direta de uniformes/calçados e o estoque atual para gerar uma lista de compras completa para o próximo ano.")
-    
+            st.subheader("Previsão de Compras e Orçamento para os Próximos 12 Meses")
+            
             if st.button("Gerar Previsão Anual"):
-                with st.spinner("Analisando todos os dados e gerando a previsão..."):
-                    # Chama a função correta, que agora faz todos os cálculos em Python
-                    forecast_result = ai_engine.generate_annual_forecast(
-                        usage_history,
-                        purchase_history,
-                        stock_data,
-                        employee_data, # Passando os dados dos funcionários
-                        forecast_months=12
+                with st.spinner("Calculando necessidade de compra para o próximo ano..."):
+                    result = ai_engine.generate_annual_forecast(
+                        usage_history, purchase_history, stock_data, employee_data, forecast_months=12
                     )
-                    
-                    # Salva o resultado no estado da sessão
-                    st.session_state.latest_forecast_result = forecast_result
-                    
-                    # Inicializa o histórico se não existir
+                    st.session_state.latest_forecast = result
                     if 'forecast_history' not in st.session_state:
                         st.session_state.forecast_history = []
-                    
-                    # Adiciona o resultado completo ao histórico
                     st.session_state.forecast_history.append({
                         "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "result": forecast_result 
+                        "result": result 
                     })
             
-            # Bloco para exibir o resultado mais recente
-            if 'latest_forecast_result' in st.session_state:
-                result = st.session_state.latest_forecast_result
-                
-                st.markdown("---")
-                
-                if "error" in result:
-                    st.error(result["error"])
+            if 'latest_forecast' in st.session_state:
+                res = st.session_state.latest_forecast
+                if "error" in res:
+                    st.error(res["error"])
                 else:
-                    report_text = result.get("report", "Nenhum relatório gerado.")
-                    
-                    # Exibe o relatório (que já contém o título, custo total e a tabela)
-                    st.markdown(report_text)
-                    
-                    # Botão de Download do PDF
+                    st.markdown(res["report"])
                     st.markdown("---")
-                    pdf_buffer = create_forecast_pdf_from_report(report_text)
+                    pdf_buffer = create_forecast_pdf_from_report(res["report"])
                     st.download_button(
-                        label="📥 Baixar Previsão Anual em PDF",
+                        label="📥 Baixar Previsão em PDF",
                         data=pdf_buffer,
                         file_name=f"Previsao_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
                         mime="application/pdf"
                     )
-    
-            # Bloco para exibir o histórico de previsões
+
             if 'forecast_history' in st.session_state and st.session_state.forecast_history:
                 with st.expander("Ver Histórico de Previsões Anuais"):
                     for rec in reversed(st.session_state.forecast_history):
@@ -170,6 +148,8 @@ def ai_recommendations_page():
                             st.markdown(history_result.get("report", "Relatório não disponível."))
                         st.markdown("---")
 
-        except Exception as e:
-                st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
-                st.exception(e)
+    # ---- FIM DO BLOCO TRY...EXCEPT CORRIGIDO ----
+    except Exception as e:
+        st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
+        st.exception(e)
+
