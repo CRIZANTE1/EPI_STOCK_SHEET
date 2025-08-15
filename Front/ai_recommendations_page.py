@@ -48,41 +48,26 @@ def ai_recommendations_page():
         
         # --- INTERFACE COM ABAS ---
         tab1, tab2 = st.tabs(["Recomendações de Compra (Análise Geral)", "Previsão Orçamentária Anual"])
-
+    
         with tab1:
-            st.subheader("Análise Rápida de Estoque e Sugestões de Compra")
+            st.subheader("Análise de Estoque e Sugestões de Compra (Base Trimestral)")
             if st.button("Gerar Recomendações Gerais"):
-                with st.spinner("Analisando estoque e consumo..."):
-                    # 'employee_data' já existe e está disponível aqui
-                    recommendations = ai_engine.stock_analysis(
-                        stock_data,
-                        purchase_history,
-                        usage_history,
-                        employee_data
+                with st.spinner("IA analisando todos os dados..."):
+                    result = ai_engine.stock_analysis(
+                        stock_data, purchase_history, usage_history, employee_data
                     )
-                    if "error" in recommendations:
-                        st.error(recommendations["error"])
-                    else:
-                        st.session_state.latest_recommendation = recommendations["recommendations"]
-                        if 'recommendation_history' not in st.session_state:
-                            st.session_state.recommendation_history = []
-                        st.session_state.recommendation_history.append({
-                            "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                            "recommendations": recommendations["recommendations"]
-                        })
-
-            if 'latest_recommendation' in st.session_state:
-                st.markdown("### Últimas Recomendações Geradas")
-                st.info(st.session_state.latest_recommendation)
+                    # Salva o resultado para ser usado pela Tab 2 e para exibição
+                    st.session_state.latest_recommendation = result
             
-            if 'recommendation_history' in st.session_state and st.session_state.recommendation_history:
-                with st.expander("Ver Histórico de Recomendações"):
-                    for rec in reversed(st.session_state.recommendation_history):
-                        st.markdown(f"**Recomendação de {rec['timestamp']}**")
-                        st.markdown(rec["recommendations"])
-                        st.markdown("---")
-
-         with tab2:
+            if 'latest_recommendation' in st.session_state:
+                res = st.session_state.latest_recommendation
+                if "error" in res:
+                    st.error(res["error"])
+                else:
+                    st.markdown("### Relatório de Análise e Recomendações")
+                    st.markdown(res["recommendations"])
+    
+        with tab2:
             st.subheader("Previsão Orçamentária de Compras para os Próximos 12 Meses")
             st.write("Esta ferramenta utiliza a recomendação da primeira aba e a projeta para um ano, calculando o orçamento total.")
     
@@ -111,21 +96,22 @@ def ai_recommendations_page():
                             file_name=f"Previsao_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
                             mime="application/pdf"
                         )
-
-            if 'forecast_history' in st.session_state and st.session_state.forecast_history:
-                with st.expander("Ver Histórico de Previsões Anuais"):
-                    for rec in reversed(st.session_state.forecast_history):
-                        st.markdown(f"**Previsão de {rec['timestamp']}**")
-                        history_result = rec.get("result", {})
-                        if "error" in history_result:
-                            st.error(history_result["error"])
-                        else:
-                            st.markdown(history_result.get("report", "Relatório não disponível."))
-                        st.markdown("---")
+    
+                if 'forecast_history' in st.session_state and st.session_state.forecast_history:
+                    with st.expander("Ver Histórico de Previsões Anuais"):
+                        for rec in reversed(st.session_state.forecast_history):
+                            st.markdown(f"**Previsão de {rec['timestamp']}**")
+                            history_result = rec.get("result", {})
+                            if "error" in history_result:
+                                st.error(history_result["error"])
+                            else:
+                                st.markdown(history_result.get("report", "Relatório não disponível."))
+                            st.markdown("---")
 
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
