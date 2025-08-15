@@ -190,7 +190,9 @@ class PDFQA:
                     size_needs = df_employees.groupby(size_col)[qty_col].sum()
                     for size, total_qty in size_needs.items():
                         if total_qty > 0 and pd.notna(size) and str(size).strip() != '-':
-                            projected_qty = np.ceil(total_qty * exchange_factor)
+                            
+                            projected_qty = total_qty
+                        
                             found_name = next((name for name in {**stock_data, **unit_costs}.keys() if epi_prefix in name.upper() and str(size).split(' ')[0] in name), None)
                             final_epi_name = found_name if found_name else f"{epi_prefix} TAMANHO {size}"
                             needs_from_employees[final_epi_name] = needs_from_employees.get(final_epi_name, 0) + projected_qty
@@ -272,6 +274,7 @@ class PDFQA:
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
         
+
 
 
 
