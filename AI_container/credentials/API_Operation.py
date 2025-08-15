@@ -165,49 +165,72 @@ class PDFQA:
 
     def generate_annual_forecast(self, stock_data_raw, employee_data, forecast_months=12):
         """
-        Gera uma previsão de compra anual precisa, baseada na normalização de nomes,
-        consumo real e regras de negócio.
+        Gera uma previsão de compra anual precisa, com custos padrão para uniformes
+        e regra de duplicação para itens de alto consumo.
         """
         try:
-            st.info("Passo 1/5: Preparando e normalizando dados...")
+            st.info("Passo 1/6: Preparando e normalizando dados...")
     
-            # --- 1. Preparação e Normalização dos Dados ---
+            # --- 1. Preparação dos Dados ---
             if not stock_data_raw or len(stock_data_raw) < 2: return {"error": "Dados de estoque insuficientes."}
             
             df_stock = pd.DataFrame(stock_data_raw[1:], columns=stock_data_raw[0])
-            # Limpeza inicial
             df_stock['epi_name'] = df_stock['epi_name'].str.strip()
             df_stock['date'] = pd.to_datetime(df_stock['date'], errors='coerce')
             df_stock['quantity'] = pd.to_numeric(df_stock['quantity'], errors='coerce').fillna(0)
             df_stock['value'] = df_stock['value'].apply(PDFQA.clean_monetary_value)
             df_stock.dropna(subset=['date', 'epi_name'], inplace=True)
     
-            # Criar nomes canônicos usando fuzzywuzzy
-            unique_names = df_stock['epi_name'].unique()
-            name_map = {name: process.extractOne(name, unique_names)[0] for name in unique_names}
-            df_stock['epi_name_normalized'] = df_stock['epi_name'].map(name_map)
+            # --- 2. CONSOLIDAÇÃO DE NOMES APRIMORADA ---
+            st.info("Passo 2/6: Consolidando nomes de EPIs...")
             
-            # Separar entradas e saídas
+            keyword_map = {
+                'BOTINA': 'BOTINA DE SEGURANÇA',
+                'CALÇA': 'CALÇA OPERACIONAL',
+                'CAMISA': 'CAMISA OPERACIONAL',
+                'CAPACETE': 'CAPACETE DE SEGURANÇA',
+                'LUVA NITRÍLICA': 'LUVA NITRÍLICA DESCARTÁVEL',
+                'LUVA DE VAQUETA': 'LUVA DE VAQUETA',
+                'CARNEIRA': 'CARNEIRA PARA CAPACETE',
+                'CINTO': 'CINTO DE SEGURANÇA'
+            }
+    
+            def get_canonical_name(name):
+                name_upper = name.upper()
+                for keyword, canonical in keyword_map.items():
+                    if keyword in name_upper:
+                        return canonical
+                return name
+    
+            df_stock['epi_name_normalized'] = df_stock['epi_name'].apply(get_canonical_name)
+            
             df_entradas = df_stock[df_stock['transaction_type'].str.lower() == 'entrada'].copy()
             df_saidas = df_stock[df_stock['transaction_type'].str.lower() == 'saída'].copy()
     
-            # --- 2. Cálculo de Custo Unitário (com nomes normalizados) ---
-            st.info("Passo 2/5: Calculando custos unitários...")
+            # --- 3. Cálculo de Custo e Estoque ---
+            st.info("Passo 3/6: Calculando custos e estoque atual...")
+            
+            # **** NOVA LÓGICA DE CUSTO PADRÃO ****
+            standard_costs = {
+                'CAMISA OPERACIONAL': 218.09,
+                'CALÇA OPERACIONAL': 192.71
+            }
+            
             df_entradas = df_entradas[df_entradas['quantity'] > 0]
             df_entradas['unit_cost'] = df_entradas['value'] / df_entradas['quantity']
-            latest_costs_df = df_entradas.sort_values('date').drop_duplicates('epi_name_normalized', keep='last')
-            unit_costs = latest_costs_df.set_index('epi_name_normalized')['unit_cost'].to_dict()
+            historical_costs = df_entradas.groupby('epi_name_normalized')['unit_cost'].mean().to_dict()
     
-            # --- 3. Cálculo de Estoque Atual (com nomes normalizados) ---
-            st.info("Passo 3/5: Calculando estoque atual...")
+            # Combina os custos padrão com os históricos, dando prioridade aos padrão
+            unit_costs = {**historical_costs, **standard_costs}
+            
             total_entradas = df_entradas.groupby('epi_name_normalized')['quantity'].sum()
             total_saidas = df_saidas.groupby('epi_name_normalized')['quantity'].sum()
             current_stock = total_entradas.reindex(total_entradas.index.union(total_saidas.index), fill_value=0) - \
                             total_saidas.reindex(total_entradas.index.union(total_saidas.index), fill_value=0)
     
             # --- 4. Análise de Consumo e Projeção da Necessidade ---
-            st.info("Passo 4/5: Analisando consumo e projetando necessidades anuais...")
-            if df_saidas.empty: return {"error": "Não há dados de saída para análise de consumo."}
+            st.info("Passo 4/6: Analisando consumo e projetando necessidades...")
+            if df_saidas.empty: return {"error": "Não há dados de saída para análise."}
             
             total_days = (df_saidas['date'].max() - df_saidas['date'].min()).days
             num_months = total_days / 30.44 if total_days > 0 else 1
@@ -220,17 +243,22 @@ class PDFQA:
             for epi_name, avg_consumption in avg_monthly_consumption.items():
                 projected_qty = np.ceil(avg_consumption * forecast_months)
                 
-                # REGRA DE NEGÓCIO: Mínimo de 100 para uniformes
-                is_uniform = any(keyword in epi_name.upper() for keyword in ['CALÇA', 'CAMISA', 'JAPONA', 'JAQUETA'])
+                is_uniform = any(keyword in epi_name.upper() for keyword in ['CALÇA', 'CAMISA'])
                 if is_uniform and projected_qty < 100:
                     projected_qty = 100
-                    justification = "Ajuste para estoque mínimo de uniformes (100 unidades)"
-                else:
-                    justification = "Projeção de consumo anual"
     
                 stock = current_stock.get(epi_name, 0)
                 needed_qty = max(0, projected_qty - stock)
                 
+                is_high_consumption = any(keyword in epi_name.upper() for keyword in ['LUVA', 'CARNEIRA'])
+                if is_high_consumption:
+                    needed_qty *= 2
+                    justification = "Projeção anual dobrada (alto consumo)"
+                elif is_uniform and projected_qty == 100:
+                    justification = "Ajuste para estoque mínimo de uniformes (100 unidades)"
+                else:
+                    justification = "Projeção de consumo anual"
+    
                 if needed_qty > 0:
                     recommendation_list.append({
                         "EPI": epi_name,
@@ -238,11 +266,11 @@ class PDFQA:
                         "Justificativa": justification
                     })
     
+            # --- 5. Cálculo do Orçamento e Geração do Relatório ---
+            st.info("Passo 5/6: Montando relatório final...")
             if not recommendation_list:
                 return {"report": "## Previsão Anual\n\nEstoque atual suficiente."}
     
-            # --- 5. Cálculo do Orçamento e Geração do Relatório Final ---
-            st.info("Passo 5/5: Calculando orçamento e montando relatório final...")
             df_recommendation = pd.DataFrame(recommendation_list)
             df_recommendation['Custo Unit. (R$)'] = df_recommendation['EPI'].map(unit_costs).fillna(0)
             df_recommendation['Custo Total (R$)'] = df_recommendation['Qtd. a Comprar'] * df_recommendation['Custo Unit. (R$)']
@@ -267,7 +295,6 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
-
 
 
 
