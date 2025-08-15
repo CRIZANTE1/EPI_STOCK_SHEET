@@ -75,7 +75,7 @@ class PDFQA:
             return f"Ocorreu um erro ao processar a pergunta: {str(e)}", 0
 
 
-    def stock_analysis(self, stock_data, purchase_history=None, usage_history=None):
+    def stock_analysis(self, stock_data, purchase_history=None, usage_history=None, employee_data=None):
         """
         Analisa dados de estoque e fornece recomendações de compra
         
@@ -89,15 +89,7 @@ class PDFQA:
         """
         try:
             st.info("Analisando estoque e gerando recomendações...")
-            sheet_operations = SheetOperations()
-            employee_data = None
-            try:
-                emp_data = sheet_operations.carregar_dados_funcionarios()
-                if emp_data:
-                    employee_data = pd.DataFrame(emp_data[1:], columns=emp_data[0])
-            except Exception as e:
-                logging.warning(f"Não foi possível carregar dados dos funcionários: {e}")
-                
+                            
             epi_replacement_info = {
                 "Botina": {
                     "periodicidade_troca": "6 meses",
@@ -310,6 +302,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
