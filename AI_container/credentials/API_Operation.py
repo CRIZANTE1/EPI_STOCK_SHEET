@@ -89,6 +89,14 @@ class PDFQA:
         """
         try:
             st.info("Analisando estoque e gerando recomendações...")
+            employee_context = ""
+            # ---- CORREÇÃO APLICADA AQUI ----
+            # Verifica se employee_data não está vazio e tem cabeçalho + dados
+            if employee_data and len(employee_data) > 1:
+                # Converte a lista de listas crua em um DataFrame do Pandas
+                header = employee_data[0]
+                data = employee_data[1:]
+                df_employees = pd.DataFrame(data, columns=header)
                             
             epi_replacement_info = {
                 "Botina": {
@@ -302,6 +310,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
