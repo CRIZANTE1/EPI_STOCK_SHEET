@@ -11,6 +11,7 @@ import os
 import pandas as pd
 import logging
 from End.Operations import SheetOperations
+import json
 
 class PDFQA:
     def __init__(self):
@@ -208,6 +209,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
