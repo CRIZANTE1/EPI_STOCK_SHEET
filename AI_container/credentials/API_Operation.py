@@ -18,22 +18,6 @@ class PDFQA:
         self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
         self.embedding_model = 'models/embedding-001'
 
-
-    @staticmethod
-    def clean_monetary_value(value):
-        if pd.isna(value) or value == '':
-            return 0.0
-        
-        s = str(value).strip()
-        
-        if ',' in s:
-            s = s.replace('.', '').replace(',', '.')
-
-        try:
-            return float(s)
-        except (ValueError, TypeError):
-            return 0.0
-            
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s,.!?\'\"-]', '', text)
@@ -74,8 +58,7 @@ class PDFQA:
             st.exception(e)
             return f"Ocorreu um erro ao processar a pergunta: {str(e)}", 0
 
-
-    def stock_analysis(self, stock_data, purchase_history=None, usage_history=None, employee_data=None):
+    def stock_analysis(self, stock_data, purchase_history=None, usage_history=None):
         """
         Analisa dados de estoque e fornece recomendações de compra
         
@@ -89,15 +72,15 @@ class PDFQA:
         """
         try:
             st.info("Analisando estoque e gerando recomendações...")
-            employee_context = ""
-            # ---- CORREÇÃO APLICADA AQUI ----
-            # Verifica se employee_data não está vazio e tem cabeçalho + dados
-            if employee_data and len(employee_data) > 1:
-                # Converte a lista de listas crua em um DataFrame do Pandas
-                header = employee_data[0]
-                data = employee_data[1:]
-                df_employees = pd.DataFrame(data, columns=header)
-                            
+            sheet_operations = SheetOperations()
+            employee_data = None
+            try:
+                emp_data = sheet_operations.carregar_dados_funcionarios()
+                if emp_data:
+                    employee_data = pd.DataFrame(emp_data[1:], columns=emp_data[0])
+            except Exception as e:
+                logging.warning(f"Não foi possível carregar dados dos funcionários: {e}")
+                
             epi_replacement_info = {
                 "Botina": {
                     "periodicidade_troca": "6 meses",
@@ -218,98 +201,8 @@ class PDFQA:
                 "timestamp": time.time()
             }
 
-    def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
-        """
-        Gera uma previsão orçamentária para os próximos meses usando IA.
-        """
-        try:
-            st.info("Iniciando a geração da previsão orçamentária...")
-            
-            if not usage_history:
-                return {"error": "Histórico de uso insuficiente para gerar previsão."}
-            if not purchase_history:
-                return {"error": "Histórico de compras insuficiente para calcular custos."}
 
-            # --- 1. Preparação dos Dados ---
-            df_usage = pd.DataFrame(usage_history)
-            df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
-            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce')
-            df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
 
-            df_purchase = pd.DataFrame(purchase_history)
-            df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-            # Limpa e converte o valor para numérico
-            df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-            df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
-            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
-            df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-
-            # --- 2. Calcular Custo Unitário Mais Recente ---
-            st.info("Calculando custos unitários mais recentes...")
-            # Calcula o custo unitário em cada compra
-            df_purchase = df_purchase[df_purchase['quantity'] > 0]
-            df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            # Pega o custo unitário da compra mais recente de cada EPI
-            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
-            unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
-
-            # --- 3. Calcular Consumo Médio Mensal ---
-            st.info("Analisando consumo histórico mensal...")
-            # Filtra dados do último ano para uma previsão mais relevante
-            one_year_ago = datetime.now() - timedelta(days=365)
-            df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
-            
-            # Agrupa por mês e por EPI
-            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M', on='date')['quantity'].sum()
-            # Calcula a média mensal para cada EPI
-            avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
-
-            # --- 4. Gerar a Previsão ---
-            st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
-            forecast = []
-            total_forecast_cost = 0
-            
-            for epi_name, avg_consumption in avg_monthly_consumption.items():
-                projected_qty = np.ceil(avg_consumption * forecast_months) # Arredonda para cima
-                unit_cost = unit_costs.get(epi_name, 0) # Pega o custo, ou 0 se não houver registro de compra
-                projected_cost = projected_qty * unit_cost
-                total_forecast_cost += projected_cost
-                
-                forecast.append({
-                    "EPI": epi_name,
-                    "Quantidade Prevista": int(projected_qty),
-                    "Custo Unitário (R$)": f"{unit_cost:.2f}",
-                    "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
-                })
-            
-            # Converte a previsão para um DataFrame para formatar para a IA
-            df_forecast = pd.DataFrame(forecast)
-
-            # --- 5. Montar o Prompt para a IA ---
-            st.info("Enviando dados para a IA gerar o relatório...")
-            prompt = f"""
-            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre que foram calculados, gere um relatório orçamentário formal.
-
-            Dados da Previsão Calculada:
-            {df_forecast.to_string(index=False)}
-
-            Custo Total Previsto para o Período: R$ {total_forecast_cost:.2f}
-
-            O relatório deve conter:
-            1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
-            2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
-            3.  **Recomendações Estratégicas:** Com base na tabela, forneça duas recomendações. Por exemplo, sugira negociar preços para itens de alto custo ou revisar a frequência de troca de itens de alto volume. Seja direto e prático.
-            """
-
-            # --- 6. Chamar a IA ---
-            response = self.model.generate_content(prompt)
-            st.success("Relatório de previsão orçamentária gerado com sucesso!")
-            return {"report": response.text}
-
-        except Exception as e:
-            st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
-            st.exception(e)
-            return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
 
 
 
