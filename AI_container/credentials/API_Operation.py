@@ -18,6 +18,22 @@ class PDFQA:
         self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
         self.embedding_model = 'models/embedding-001'
 
+
+    @staticmethod
+    def clean_monetary_value(value):
+        if pd.isna(value) or value == '':
+            return 0.0
+        
+        s = str(value).strip()
+        
+        if ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return 0.0
+            
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s,.!?\'\"-]', '', text)
@@ -294,6 +310,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
