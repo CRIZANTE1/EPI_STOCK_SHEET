@@ -82,38 +82,35 @@ def ai_recommendations_page():
                         st.markdown(rec["recommendations"])
                         st.markdown("---")
 
-        with tab2:
-            st.subheader("Previsão de Compras e Orçamento para os Próximos 12 Meses")
-            if st.button("Gerar Previsão Anual"):
-                with st.spinner("Analisando dados e gerando previsão..."):
-                    # A chamada agora é mais simples
-                    result = ai_engine.generate_annual_forecast(
-                        stock_data_raw,
-                        employee_data,
-                        forecast_months=12 # Passa a lista de listas original
-                    )
-                    st.session_state.latest_forecast = result
-                    if 'forecast_history' not in st.session_state:
-                        st.session_state.forecast_history = []
-                    st.session_state.forecast_history.append({
-                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "result": result 
-                    })
-            
-            if 'latest_forecast' in st.session_state:
-                res = st.session_state.latest_forecast
-                if "error" in res:
-                    st.error(res["error"])
-                else:
-                    st.markdown(res["report"])
-                    st.markdown("---")
-                    pdf_buffer = create_forecast_pdf_from_report(res["report"])
-                    st.download_button(
-                        label="📥 Baixar Previsão em PDF",
-                        data=pdf_buffer,
-                        file_name=f"Previsao_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
-                        mime="application/pdf"
-                    )
+         with tab2:
+            st.subheader("Previsão Orçamentária de Compras para os Próximos 12 Meses")
+            st.write("Esta ferramenta utiliza a recomendação da primeira aba e a projeta para um ano, calculando o orçamento total.")
+    
+            # Botão só fica ativo se a recomendação da tab1 já foi gerada
+            if 'latest_recommendation' not in st.session_state or "error" in st.session_state.latest_recommendation:
+                st.warning("👈 Por favor, gere primeiro as 'Recomendações Gerais' na primeira aba para habilitar a previsão anual.")
+            else:
+                if st.button("Gerar Previsão Anual a partir da Recomendação"):
+                    with st.spinner("IA projetando a necessidade anual e calculando o orçamento..."):
+                        short_term_text = st.session_state.latest_recommendation['recommendations']
+                        
+                        result = ai_engine.generate_annual_forecast(short_term_text, purchase_history)
+                        st.session_state.latest_forecast = result
+                
+                if 'latest_forecast' in st.session_state:
+                    res = st.session_state.latest_forecast
+                    if "error" in res:
+                        st.error(res["error"])
+                    else:
+                        st.markdown(res["report"])
+                        st.markdown("---")
+                        pdf_buffer = create_forecast_pdf_from_report(res["report"])
+                        st.download_button(
+                            label="📥 Baixar Previsão em PDF",
+                            data=pdf_buffer,
+                            file_name=f"Previsao_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                            mime="application/pdf"
+                        )
 
             if 'forecast_history' in st.session_state and st.session_state.forecast_history:
                 with st.expander("Ver Histórico de Previsões Anuais"):
@@ -129,6 +126,7 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
