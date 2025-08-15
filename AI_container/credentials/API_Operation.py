@@ -13,6 +13,7 @@ import logging
 from End.Operations import SheetOperations
 import json
 from datetime import datetime
+from fuzzywuzzy import process
 
 class PDFQA:
     def __init__(self):
@@ -162,109 +163,102 @@ class PDFQA:
             st.exception(e)
             return { "error": f"Ocorreu um erro ao analisar o estoque: {str(e)}" }
 
-    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, employee_data, forecast_months=12):
+    def generate_annual_forecast(self, stock_data_raw, employee_data, forecast_months=12):
         """
-        Usa Python para cálculos precisos e a IA para análise estratégica e formatação do relatório.
+        Gera uma previsão de compra anual precisa, baseada na normalização de nomes,
+        consumo real e regras de negócio.
         """
         try:
-            st.info("Passo 1/3: Realizando cálculos de necessidade...")
-            
-            # --- 1. PYTHON FAZ O TRABALHO BRAÇAL (CÁLCULOS PRECISOS) ---
-            if not usage_history: return {"error": "Histórico de uso insuficiente."}
-            if not purchase_history: return {"error": "Histórico de compras insuficiente."}
-            if not employee_data: return {"error": "Dados de funcionários não carregados."}
-            
-            df_usage = pd.DataFrame(usage_history); df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce'); df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0); df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
-            df_purchase = pd.DataFrame(purchase_history); df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce'); df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value); df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0); df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-            df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
-            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy(); df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last'); unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
+            st.info("Passo 1/5: Preparando e normalizando dados...")
     
-            needs_from_employees = {}
-            employee_need_mapping = {'Tamanho Calça': ('CALÇA', 'Quantidade de Calças'), 'Tamanho do calçado': ('BOTINA', 'Quantidade de Calçado'), 'Tamanho Camisa Manga Comprida': ('CAMISA', 'Quantidade de Camisas'), 'Tamanho Camisa Polo': ('CAMISA POLO', 'Quantidade de Camisa Polo')}
-            exchange_factor = forecast_months / 6.0
+            # --- 1. Preparação e Normalização dos Dados ---
+            if not stock_data_raw or len(stock_data_raw) < 2: return {"error": "Dados de estoque insuficientes."}
             
-            for size_col, (epi_prefix, qty_col) in employee_need_mapping.items():
-                if size_col in df_employees.columns and qty_col in df_employees.columns:
-                    df_employees[qty_col] = pd.to_numeric(df_employees[qty_col], errors='coerce').fillna(0)
-                    size_needs = df_employees.groupby(size_col)[qty_col].sum()
-                    for size, total_qty in size_needs.items():
-                        if total_qty > 0 and pd.notna(size) and str(size).strip() != '-':
-                            
-                            projected_qty = total_qty
-                        
-                            found_name = next((name for name in {**stock_data, **unit_costs}.keys() if epi_prefix in name.upper() and str(size).split(' ')[0] in name), None)
-                            final_epi_name = found_name if found_name else f"{epi_prefix} TAMANHO {size}"
-                            needs_from_employees[final_epi_name] = needs_from_employees.get(final_epi_name, 0) + projected_qty
+            df_stock = pd.DataFrame(stock_data_raw[1:], columns=stock_data_raw[0])
+            # Limpeza inicial
+            df_stock['epi_name'] = df_stock['epi_name'].str.strip()
+            df_stock['date'] = pd.to_datetime(df_stock['date'], errors='coerce')
+            df_stock['quantity'] = pd.to_numeric(df_stock['quantity'], errors='coerce').fillna(0)
+            df_stock['value'] = df_stock['value'].apply(PDFQA.clean_monetary_value)
+            df_stock.dropna(subset=['date', 'epi_name'], inplace=True)
     
-            excluded_prefixes = ['CALÇA', 'BOTINA', 'CAMISA']
-            df_usage_others = df_usage[~df_usage['epi_name'].str.upper().str.contains('|'.join(excluded_prefixes), na=False)]
-            needs_from_consumption = {}
-            if not df_usage_others.empty:
-                total_days = (df_usage_others['date'].max() - df_usage_others['date'].min()).days
-                num_months_in_data = total_days / 30.44 if total_days > 0 else 1
-                if num_months_in_data < 1: num_months_in_data = 1
-                total_consumption = df_usage_others.groupby('epi_name')['quantity'].sum()
-                avg_monthly_consumption = total_consumption / num_months_in_data
-                for epi_name, avg_consumption in avg_monthly_consumption.items():
-                    needs_from_consumption[epi_name] = np.ceil(avg_consumption * forecast_months)
+            # Criar nomes canônicos usando fuzzywuzzy
+            unique_names = df_stock['epi_name'].unique()
+            name_map = {name: process.extractOne(name, unique_names)[0] for name in unique_names}
+            df_stock['epi_name_normalized'] = df_stock['epi_name'].map(name_map)
+            
+            # Separar entradas e saídas
+            df_entradas = df_stock[df_stock['transaction_type'].str.lower() == 'entrada'].copy()
+            df_saidas = df_stock[df_stock['transaction_type'].str.lower() == 'saída'].copy()
     
-            total_projected_needs = {**needs_from_employees, **needs_from_consumption}
+            # --- 2. Cálculo de Custo Unitário (com nomes normalizados) ---
+            st.info("Passo 2/5: Calculando custos unitários...")
+            df_entradas = df_entradas[df_entradas['quantity'] > 0]
+            df_entradas['unit_cost'] = df_entradas['value'] / df_entradas['quantity']
+            latest_costs_df = df_entradas.sort_values('date').drop_duplicates('epi_name_normalized', keep='last')
+            unit_costs = latest_costs_df.set_index('epi_name_normalized')['unit_cost'].to_dict()
+    
+            # --- 3. Cálculo de Estoque Atual (com nomes normalizados) ---
+            st.info("Passo 3/5: Calculando estoque atual...")
+            total_entradas = df_entradas.groupby('epi_name_normalized')['quantity'].sum()
+            total_saidas = df_saidas.groupby('epi_name_normalized')['quantity'].sum()
+            current_stock = total_entradas.reindex(total_entradas.index.union(total_saidas.index), fill_value=0) - \
+                            total_saidas.reindex(total_entradas.index.union(total_saidas.index), fill_value=0)
+    
+            # --- 4. Análise de Consumo e Projeção da Necessidade ---
+            st.info("Passo 4/5: Analisando consumo e projetando necessidades anuais...")
+            if df_saidas.empty: return {"error": "Não há dados de saída para análise de consumo."}
+            
+            total_days = (df_saidas['date'].max() - df_saidas['date'].min()).days
+            num_months = total_days / 30.44 if total_days > 0 else 1
+            if num_months < 1: num_months = 1
+            
+            total_consumption = df_saidas.groupby('epi_name_normalized')['quantity'].sum()
+            avg_monthly_consumption = total_consumption / num_months
             
             recommendation_list = []
-            all_relevant_epis = set(total_projected_needs.keys()) | set(stock_data.keys())
-            for epi_name in all_relevant_epis:
-                projected_qty = total_projected_needs.get(epi_name, 0)
-                current_stock = stock_data.get(epi_name, 0)
-                needed_qty = max(0, projected_qty - current_stock)
-                if 0 < current_stock <= 5 and needed_qty < 2: needed_qty = 2
-                if current_stock > 5 and needed_qty == 0: needed_qty = 1
+            for epi_name, avg_consumption in avg_monthly_consumption.items():
+                projected_qty = np.ceil(avg_consumption * forecast_months)
+                
+                # REGRA DE NEGÓCIO: Mínimo de 100 para uniformes
+                is_uniform = any(keyword in epi_name.upper() for keyword in ['CALÇA', 'CAMISA', 'JAPONA', 'JAQUETA'])
+                if is_uniform and projected_qty < 100:
+                    projected_qty = 100
+                    justification = "Ajuste para estoque mínimo de uniformes (100 unidades)"
+                else:
+                    justification = "Projeção de consumo anual"
+    
+                stock = current_stock.get(epi_name, 0)
+                needed_qty = max(0, projected_qty - stock)
+                
                 if needed_qty > 0:
                     recommendation_list.append({
-                        "EPI": epi_name.strip(),
-                        "Qtd. Ideal a Comprar": int(needed_qty),
-                        "Custo Unit. (R$)": unit_costs.get(epi_name.strip(), 0.0)
+                        "EPI": epi_name,
+                        "Qtd. a Comprar": int(needed_qty),
+                        "Justificativa": justification
                     })
     
             if not recommendation_list:
                 return {"report": "## Previsão Anual\n\nEstoque atual suficiente."}
-            
+    
+            # --- 5. Cálculo do Orçamento e Geração do Relatório Final ---
+            st.info("Passo 5/5: Calculando orçamento e montando relatório final...")
             df_recommendation = pd.DataFrame(recommendation_list)
-            df_recommendation['Custo Total Ideal (R$)'] = df_recommendation['Qtd. Ideal a Comprar'] * df_recommendation['Custo Unit. (R$)']
-            df_recommendation = df_recommendation.sort_values(by="Custo Total Ideal (R$)", ascending=False)
-            total_ideal_cost = df_recommendation['Custo Total Ideal (R$)'].sum()
-    
-            # --- 2. IA FAZ O TRABALHO ESTRATÉGICO ---
-            st.info("Passo 2/3: IA analisando dados e gerando relatório estratégico...")
+            df_recommendation['Custo Unit. (R$)'] = df_recommendation['EPI'].map(unit_costs).fillna(0)
+            df_recommendation['Custo Total (R$)'] = df_recommendation['Qtd. a Comprar'] * df_recommendation['Custo Unit. (R$)']
             
-            prompt = f"""
-            **Sua Tarefa:** Você é um especialista sênior em Gestão de Estoque e Compras. Sua tarefa é analisar os dados pré-calculados e gerar um relatório completo de previsão de compras anual.
-    
-            **Dados de Entrada (Cálculo Bruto da Necessidade):**
-            A tabela abaixo mostra a necessidade de compra "ideal" calculada matematicamente para os próximos 12 meses. O custo total ideal é de R$ {total_ideal_cost:,.2f}.
-            ```
-            {df_recommendation.to_string(index=False)}
-            ```
-    
-            **Instruções para o Relatório Final:**
-            1.  **Analise a lista:** Use seu conhecimento para interpretar os dados. Itens com custo alto merecem atenção, itens de consumo rápido precisam de um bom estoque de segurança.
-            2.  **Crie um relatório final em Markdown** com as seguintes seções:
-                *   **Título:** `### Previsão de Compras Anual e Análise Estratégica`
-                *   **Orçamento Estimado:** Calcule o custo total final com base nas suas recomendações e apresente-o (ex: `#### Orçamento Total Estimado: R$ 198.543,21`).
-                *   **Resumo Executivo (Curto):** Um parágrafo destacando o valor total e os 2-3 principais itens que impulsionam o custo.
-                *   **Lista de Compras Recomendada:** Uma tabela final com as colunas `EPI`, `Qtd. a Comprar`, `Custo Total (R$)` e `Justificativa`. Na `Qtd. a Comprar`, você pode ajustar a "Qtd. Ideal" com bom senso (arredondar, etc.) e explicar na `Justificativa`.
-                *   **Sugestão de Cronograma de Compras:** Sugira quais itens devem ser comprados mensalmente, trimestralmente ou semestralmente.
+            df_recommendation = df_recommendation.sort_values(by="Custo Total (R$)", ascending=False)
+            total_cost = df_recommendation['Custo Total (R$)'].sum()
+            formatted_total_cost = '{:_.2f}'.format(total_cost).replace('.', ',').replace('_', '.')
             
-            **Seja preciso, use todos os dados e forneça um relatório gerencial de alto nível.**
-            """
+            df_display = df_recommendation.copy()
+            df_display['Custo Unit. (R$)'] = df_display['Custo Unit. (R$)'].map('R$ {:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
+            df_display['Custo Total (R$)'] = df_display['Custo Total (R$)'].map('R$ {:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
             
-            st.info("Passo 3/3: Aguardando formatação final da IA...")
-            response = self.model.generate_content(prompt)
-            
-            try:
-                final_report = response.text
-            except ValueError:
-                final_report = "A IA não conseguiu gerar o relatório (provável bloqueio de segurança)."
+            report_title = f"### Previsão de Compras para {forecast_months} Meses"
+            report_subtitle = f"#### Orçamento Total Estimado: {formatted_total_cost}"
+            table_md = df_display.to_markdown(index=False)
+            final_report = f"{report_title}\n{report_subtitle}\n\n{table_md}"
     
             st.success("Previsão de compras gerada com sucesso!")
             return {"report": final_report}
@@ -273,7 +267,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
-        
+
 
 
 
