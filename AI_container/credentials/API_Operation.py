@@ -210,16 +210,14 @@ class PDFQA:
                 "timestamp": time.time()
             }
 
-    def generate_purchase_recommendation(self, usage_history, purchase_history, stock_data, employee_data, forecast_months=3):
+    def generate_annual_forecast(self, usage_history, purchase_history, stock_data, employee_data, forecast_months=12):
         """
-        Gera uma análise de estoque completa e uma lista de compras projetada para um
-        determinado número de meses.
+        Gera uma previsão orçamentária anual precisa, unindo todas as fontes de dados.
         """
         try:
-            period_text = "Trimestral" if forecast_months == 3 else f"para {forecast_months} Meses"
-            st.info(f"Iniciando análise de necessidades ({period_text})...")
+            st.info(f"Iniciando a geração da previsão para {forecast_months} meses...")
             
-            # --- 1. Preparação dos Dados (mesma lógica robusta) ---
+            # --- 1. Preparação dos Dados ---
             if not usage_history: return {"error": "Histórico de uso insuficiente."}
             if not purchase_history: return {"error": "Histórico de compras insuficiente."}
             if not employee_data: return {"error": "Dados de funcionários não carregados."}
@@ -249,7 +247,6 @@ class PDFQA:
                 'Tamanho Camisa Manga Comprida': ('CAMISA', 'Quantidade de Camisas'),
                 'Tamanho Camisa Polo': ('CAMISA POLO', 'Quantidade de Camisa Polo')
             }
-            # Fator de troca (2x por ano para itens semestrais)
             exchange_factor = forecast_months / 6.0
             
             for size_col, (epi_prefix, qty_col) in employee_need_mapping.items():
@@ -259,7 +256,6 @@ class PDFQA:
                     for size, total_qty in size_needs.items():
                         if total_qty > 0 and pd.notna(size) and str(size).strip() != '-':
                             projected_qty = np.ceil(total_qty * exchange_factor)
-                            # Tenta encontrar um nome de produto completo
                             found_name = next((name for name in {**stock_data, **unit_costs}.keys() if epi_prefix in name.upper() and str(size).split(' ')[0] in name), None)
                             final_epi_name = found_name if found_name else f"{epi_prefix} TAMANHO {size}"
                             needs_from_employees[final_epi_name] = needs_from_employees.get(final_epi_name, 0) + projected_qty
@@ -272,24 +268,20 @@ class PDFQA:
                 total_days = (df_usage_others['date'].max() - df_usage_others['date'].min()).days
                 num_months_in_data = total_days / 30.44 if total_days > 0 else 1
                 if num_months_in_data < 1: num_months_in_data = 1
-                
                 total_consumption = df_usage_others.groupby('epi_name')['quantity'].sum()
                 avg_monthly_consumption = total_consumption / num_months_in_data
                 for epi_name, avg_consumption in avg_monthly_consumption.items():
-                    needs_from_consumption[epi_name] = np.ceil(avg_monthly_consumption * forecast_months)
+                    needs_from_consumption[epi_name] = np.ceil(avg_consumption * forecast_months)
 
-            # --- 4. Unificação, Regras de Negócio e Geração do Relatório ---
+            # --- 4. Unificação e Geração do Relatório Final ---
             total_projected_needs = needs_from_employees.copy()
             total_projected_needs.update(needs_from_consumption)
-            
             recommendation_list = []
             for epi_name, projected_qty in total_projected_needs.items():
                 current_stock = stock_data.get(epi_name, 0)
                 needed_qty = max(0, projected_qty - current_stock)
-                
                 if 0 < current_stock <= 5 and needed_qty < 2:
-                    needed_qty = 2
-
+                    needed_qty += 2
                 if needed_qty > 0:
                     unit_cost = unit_costs.get(epi_name.strip(), 0.0)
                     total_cost = needed_qty * unit_cost
@@ -301,24 +293,19 @@ class PDFQA:
                     })
 
             if not recommendation_list:
-                return {"report": f"## Previsão para {forecast_months} Meses\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "total_cost": 0}
+                return {"report": f"## Previsão para {forecast_months} Meses\n\nEstoque atual suficiente.", "total_cost": 0}
             
-            df_recommendation = pd.DataFrame(recommendation_list)
-            df_recommendation = df_recommendation.sort_values(by="Custo Total (R$)", ascending=False)
-            
+            df_recommendation = pd.DataFrame(recommendation_list).sort_values(by="Custo Total (R$)", ascending=False)
             final_total_cost = df_recommendation['Custo Total (R$)'].sum()
             formatted_total_cost = '{:_.2f}'.format(final_total_cost).replace('.', ',').replace('_', '.')
             
-            # Formatação para exibição
             df_display = df_recommendation.copy()
-            df_display['Custo Unit. (R$)'] = df_display['Custo Unit. (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
-            df_display['Custo Total (R$)'] = df_display['Custo Total (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
-
-            # Montagem do Relatório Final (sem IA para formatação, garantindo precisão)
-            report_title = f"### Lista de Compras Recomendada - Previsão para {forecast_months} Meses"
+            df_display['Custo Unit. (R$)'] = df_display['Custo Unit. (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').replace('.', ',').str.replace('v', '.')
+            df_display['Custo Total (R$)'] = df_display['Custo Total (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').replace('.', ',').str.replace('v', '.')
+            
+            report_title = f"### Previsão de Compras para {forecast_months} Meses"
             report_subtitle = f"#### Orçamento Total Estimado: R$ {formatted_total_cost}"
             table_md = df_display.to_markdown(index=False)
-            
             final_report = f"{report_title}\n{report_subtitle}\n\n{table_md}"
 
             st.success("Previsão de compras gerada com sucesso!")
@@ -328,6 +315,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
