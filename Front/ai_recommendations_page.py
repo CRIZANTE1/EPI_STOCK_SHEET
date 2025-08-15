@@ -88,7 +88,9 @@ def ai_recommendations_page():
                 with st.spinner("Analisando dados e gerando previsão..."):
                     # A chamada agora é mais simples
                     result = ai_engine.generate_annual_forecast(
-                        stock_data_raw # Passa a lista de listas original
+                        stock_data_raw,
+                        employee_data,
+                        forecast_months=12 # Passa a lista de listas original
                     )
                     st.session_state.latest_forecast = result
                     if 'forecast_history' not in st.session_state:
@@ -127,6 +129,7 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
 
