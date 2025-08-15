@@ -70,39 +70,96 @@ class PDFQA:
 
     def stock_analysis(self, stock_data, purchase_history=None, usage_history=None, employee_data=None):
         """
-        Gera uma análise de estoque completa e uma lista de compras para curto prazo.
+        Analisa dados de estoque e fornece recomendações de compra (versão completa restaurada).
         """
         try:
-            st.info("Analisando estoque e necessidades de curto prazo...")
+            st.info("Analisando estoque e gerando recomendações...")
             
-            employee_context_str = ""
-            if employee_data:
+            # A lógica de carregar os dados de funcionários agora vem do argumento da função
+            df_employees = None
+            if employee_data and len(employee_data) > 1:
                 df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
-                employee_summary = {
-                    "total_funcionarios": len(df_employees),
-                    "distribuicao_tamanhos_calca": df_employees['Tamanho Calça'].value_counts().to_dict(),
-                    "necessidade_total_calcas": pd.to_numeric(df_employees['Quantidade de Calças'], errors='coerce').sum(),
-                    "distribuicao_tamanhos_calcado": df_employees['Tamanho do calçado'].value_counts().to_dict(),
-                    "necessidade_total_calcados": pd.to_numeric(df_employees['Quantidade de Calçado'], errors='coerce').sum()
+
+            employee_context = ""
+            if df_employees is not None:
+                # Converte colunas de quantidade para numérico antes de somar
+                for col in ['Quantidade de Calças', 'Quantidade de Jalecos', 'Quantidade de Camisa Polo', 
+                            'Quantidade de Japona de Lã', 'Quantidade de Jaquetas', 'Quantidade de Calçado']:
+                    if col in df_employees.columns:
+                        df_employees[col] = pd.to_numeric(df_employees[col], errors='coerce').fillna(0)
+
+                size_counts = {
+                    'Camisa Manga Comprida': df_employees['Tamanho Camisa Manga Comprida'].value_counts().to_dict(),
+                    'Calça': df_employees['Tamanho Calça'].value_counts().to_dict(),
+                    'Jaleco': df_employees['Tamanho Jaleco para laboratório'].value_counts().to_dict(),
+                    'Camisa Polo': df_employees['Tamanho Camisa Polo'].value_counts().to_dict(),
+                    'Japona de Lã': df_employees['Tamanho de Japona de Lã (para frio)'].value_counts().to_dict(),
+                    'Jaqueta': df_employees['Tamanho Jaquetas (para frio)'].value_counts().to_dict(),
+                    'Calçado': df_employees['Tamanho do calçado'].value_counts().to_dict()
                 }
-                employee_context_str = json.dumps(employee_summary, indent=2, ensure_ascii=False)
+                
+                total_needs = {
+                    'Calça': df_employees['Quantidade de Calças'].sum(),
+                    'Jaleco': df_employees['Quantidade de Jalecos'].sum(),
+                    'Camisa Polo': df_employees['Quantidade de Camisa Polo'].sum(),
+                    'Japona de Lã': df_employees['Quantidade de Japona de Lã'].sum(),
+                    'Jaqueta': df_employees['Quantidade de Jaquetas'].sum(),
+                    'Calçado': df_employees['Quantidade de Calçado'].sum()
+                }
+                area_analysis = df_employees.groupby('Área de Atuação').size().to_dict()
+                gender_analysis = df_employees.groupby('Gênero').size().to_dict()
+                employee_context = f"""
+                Informações adicionais dos funcionários:
+                Distribuição de tamanhos por EPI: {size_counts}
+                Necessidades totais por EPI: {total_needs}
+                Distribuição por área: {area_analysis}
+                Distribuição por gênero: {gender_analysis}
+                Por favor, considere estas informações ao fazer as recomendações de compra,
+                levando em conta os tamanhos necessários e as quantidades adequadas para cada funcionário.
+                """
             
-            prompt = f"""
-            Com base no estoque atual, histórico de uso, e dados dos funcionários, gere uma recomendação de compra para os próximos 3 meses.
-
-            Estoque Atual:
-            {json.dumps(stock_data, indent=2)}
-
-            Dados dos Funcionários (Resumo):
-            {employee_context_str}
-
-            Sua resposta deve ser um relatório em Markdown contendo uma lista de itens a comprar e a justificativa.
+            context = f"""
+            Dados atuais do estoque: {stock_data}
+            {f'Histórico de compras: {purchase_history}' if purchase_history else ''}
+            {f'Histórico de uso: {usage_history}' if usage_history else ''}
+            {employee_context if employee_context else ''}
+            
+            Informações importantes sobre periodicidade de troca dos EPIs:
+            1. Botinas:
+               - Troca a cada 6 meses
+               - Vida útil em estoque: 1 ano (após isso o solado derrete)
+            2. Luvas CA 28011:
+               - 50% dos funcionários trocam a cada 2 semanas, 50% trocam a cada 1 mês.
+            3. Cinto de Segurança:
+               - Troca programada a cada 6 meses.
+            4. Uniformes (Camisas e Calças):
+               - Troca mínima a cada 6 meses.
+            
+            Com base nos dados fornecidos, analise de forma minimalista (direto ao ponto):
+            1. Quais itens estão com estoque baixo e precisam ser reabastecidos.
+            2. Quais itens têm alto consumo e devem ter prioridade de compra.
+            3. Se existe algum padrão de consumo que deva ser considerado.
+            4. Uma lista de recomendações de compra com quantidades sugeridas.
+            5. Sugestão de cronograma de compras para evitar excesso de estoque.
+            6. Quando indicar compra seja especifico, indique o EPI, o CA e a quantidade especifica.
             """
-            response = self.model.generate_content(prompt)
-            return {"recommendations": response.text}
+            response = self.model.generate_content(context)
+            
+            try:
+                recommendations = response.text
+            except ValueError:
+                recommendations = "A IA não conseguiu gerar recomendações (provável bloqueio de segurança)."
+            
+            st.success("Análise de estoque concluída com sucesso.")
+            
+            return {
+                "recommendations": recommendations,
+            }
+            
         except Exception as e:
-            logging.error(f"Erro na função stock_analysis: {e}")
-            return {"error": f"Erro na análise de estoque: {str(e)}"}
+            st.error(f"Erro ao analisar o estoque: {str(e)}")
+            st.exception(e)
+            return { "error": f"Ocorreu um erro ao analisar o estoque: {str(e)}" }
 
     def generate_annual_forecast(self, usage_history, purchase_history, stock_data, employee_data, forecast_months=12):
         """
@@ -209,6 +266,7 @@ class PDFQA:
             st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
