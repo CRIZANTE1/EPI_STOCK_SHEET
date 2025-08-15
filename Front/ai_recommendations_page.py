@@ -85,13 +85,10 @@ def ai_recommendations_page():
         with tab2:
             st.subheader("Previsão de Compras e Orçamento para os Próximos 12 Meses")
             if st.button("Gerar Previsão Anual"):
-                with st.spinner("Calculando necessidade de compra para o próximo ano..."):
+                with st.spinner("Analisando dados e gerando previsão..."):
                     result = ai_engine.generate_annual_forecast(
-                        usage_history, 
-                        purchase_history, 
-                        stock_data, 
-                        employee_data, 
-                        forecast_months=12
+                        stock_data_raw, # Passa a lista de listas original
+                        employee_data
                     )
                     st.session_state.latest_forecast = result
                     if 'forecast_history' not in st.session_state:
@@ -130,5 +127,6 @@ def ai_recommendations_page():
     except Exception as e:
         st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
         st.exception(e)
+
 
 
