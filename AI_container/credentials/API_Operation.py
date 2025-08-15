@@ -11,23 +11,12 @@ import os
 import pandas as pd
 import logging
 from End.Operations import SheetOperations
-import json
-from datetime import datetime
-from fuzzywuzzy import process
 
 class PDFQA:
     def __init__(self):
         load_api()  
-        self.model = genai.GenerativeModel('gemini-2.5-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
         self.embedding_model = 'models/embedding-001'
-
-    @staticmethod
-    def clean_monetary_value(value):
-        if pd.isna(value) or value == '': return 0.0
-        s = str(value).strip()
-        if ',' in s: s = s.replace('.', '').replace(',', '.')
-        try: return float(s)
-        except (ValueError, TypeError): return 0.0
 
     def clean_text(self, text):
         text = re.sub(r'\s+', ' ', text)
@@ -70,176 +59,241 @@ class PDFQA:
             return f"Ocorreu um erro ao processar a pergunta: {str(e)}", 0
 
 
-    def stock_analysis(self, stock_data, purchase_history, usage_history, employee_data):
+    def stock_analysis(self, stock_data, purchase_history=None, usage_history=None):
         """
-        Gera uma análise de estoque completa e uma lista de compras de curto prazo (base 3 meses).
+        Analisa dados de estoque e fornece recomendações de compra
+        
+        Args:
+            stock_data (dict): Dados atuais do estoque com quantidades
+            purchase_history (dict, optional): Histórico de compras
+            usage_history (dict, optional): Histórico de uso dos EPIs
+            
+        Returns:
+            dict: Recomendações de compra e análise de estoque
         """
         try:
-            st.info("Analisando estoque e necessidades de curto prazo...")
-            
-            df_employees = None
-            if employee_data and len(employee_data) > 1:
-                df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
-
-            employee_context = ""
-            if df_employees is not None:
-                # Converte colunas de quantidade para numérico
-                qty_cols = [col for col in df_employees.columns if 'Quantidade' in col]
-                for col in qty_cols:
-                    df_employees[col] = pd.to_numeric(df_employees[col], errors='coerce').fillna(0)
+            st.info("Analisando estoque e gerando recomendações...")
+            sheet_operations = SheetOperations()
+            employee_data = None
+            try:
+                emp_data = sheet_operations.carregar_dados_funcionarios()
+                if emp_data:
+                    employee_data = pd.DataFrame(emp_data[1:], columns=emp_data[0])
+            except Exception as e:
+                logging.warning(f"Não foi possível carregar dados dos funcionários: {e}")
                 
-                # Resumo para a IA
-                employee_summary = {
-                    "total_funcionarios": len(df_employees),
-                    "necessidade_total_calcas": df_employees['Quantidade de Calças'].sum() if 'Quantidade de Calças' in df_employees.columns else 0,
-                    "necessidade_total_calcados": df_employees['Quantidade de Calçado'].sum() if 'Quantidade de Calçado' in df_employees.columns else 0
+            epi_replacement_info = {
+                "Botina": {
+                    "periodicidade_troca": "6 meses",
+                    "vida_util_estoque": "12 meses (solado derrete após 1 ano em estoque)",
+                    "observacoes": "Necessário considerar vida útil limitada em estoque"
+                },
+                "Luva CA 28011": {
+                    "periodicidade_troca": {
+                        "grupo_1": "2 semanas (50% dos funcionários)",
+                        "grupo_2": "1 mês (50% dos funcionários)"
+                    },
+                    "observacoes": "Alta rotatividade, consumo variável entre funcionários"
+                },
+                "Cinto de Segurança": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral programada"
+                },
+                "Camisa": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral mínima"
+                },
+                "Calça": {
+                    "periodicidade_troca": "6 meses",
+                    "observacoes": "Troca semestral mínima"
                 }
-                employee_context = json.dumps(employee_summary, indent=2, ensure_ascii=False)
-
-            context = f"""
-            **Dados:**
-            - Estoque Atual: {json.dumps(stock_data, indent=2, ensure_ascii=False)}
-            - Histórico de Uso (últimos 50): {pd.DataFrame(usage_history).head(50).to_string()}
-            - Resumo dos Funcionários: {employee_context}
+            }
             
-            **Regras de Negócio:**
-            - Botinas e Uniformes: Troca a cada 6 meses.
-            - Luvas (ex: CA 28011): Consumo muito alto (média de 1.5 por funcionário/mês).
-            - Estoque Crítico: Qualquer item com estoque <= 5.
-
-            **Tarefa:**
-            Com base em TODOS os dados, gere um relatório Markdown completo e detalhado. A sua recomendação de compra deve ser projetada para garantir um estoque de segurança para os próximos **3 MESES**.
-            O relatório deve conter as 5 seções que você gerou anteriormente:
-            1. Itens com Estoque Baixo (Reabastecimento Urgente)
-            2. Itens com Alto Consumo (Prioridade de Compra)
-            3. Padrão de Consumo
-            4. Recomendações de Compra (Lista Detalhada para 3 meses)
-            5. Sugestão de Cronograma de Compras (Mensal, Trimestral, etc.)
+            employee_context = ""
+            if employee_data is not None:
+                size_counts = {
+                    'Camisa Manga Comprida': employee_data['Tamanho Camisa Manga Comprida'].value_counts().to_dict(),
+                    'Calça': employee_data['Tamanho Calça'].value_counts().to_dict(),
+                    'Jaleco': employee_data['Tamanho Jaleco para laboratório'].value_counts().to_dict(),
+                    'Camisa Polo': employee_data['Tamanho Camisa Polo'].value_counts().to_dict(),
+                    'Japona de Lã': employee_data['Tamanho de Japona de Lã (para frio)'].value_counts().to_dict(),
+                    'Jaqueta': employee_data['Tamanho Jaquetas (para frio)'].value_counts().to_dict(),
+                    'Calçado': employee_data['Tamanho do calçado'].value_counts().to_dict()
+                }
+                
+                total_needs = {
+                    'Calça': employee_data['Quantidade de Calças'].sum(),
+                    'Jaleco': employee_data['Quantidade de Jalecos'].sum(),
+                    'Camisa Polo': employee_data['Quantidade de Camisa Polo'].sum(),
+                    'Japona de Lã': employee_data['Quantidade de Japona de Lã'].sum(),
+                    'Jaqueta': employee_data['Quantidade de Jaquetas'].sum(),
+                    'Calçado': employee_data['Quantidade de Calçado'].sum()
+                }
+                area_analysis = employee_data.groupby('Área de Atuação').size().to_dict()
+                gender_analysis = employee_data.groupby('Gênero').size().to_dict()
+                employee_context = f"""
+                Informações adicionais dos funcionários:
+                
+                Distribuição de tamanhos por EPI: {size_counts}
+                
+                Necessidades totais por EPI: {total_needs}
+                
+                Distribuição por área: {area_analysis}
+                
+                Distribuição por gênero: {gender_analysis}
+                
+                Por favor, considere estas informações ao fazer as recomendações de compra,
+                levando em conta os tamanhos necessários e as quantidades adequadas para cada funcionário.
+                """
+            context = f"""
+            Dados atuais do estoque: {stock_data}
+            
+            {f'Histórico de compras: {purchase_history}' if purchase_history else ''}
+            
+            {f'Histórico de uso: {usage_history}' if usage_history else ''}
+            
+            {employee_context if employee_context else ''}
+            
+            Informações importantes sobre periodicidade de troca dos EPIs:
+            
+            1. Botinas:
+               - Troca a cada 6 meses
+               - Vida útil em estoque: 1 ano (após isso o solado derrete)
+               - Importante manter estoque controlado devido à vida útil limitada
+            
+            2. Luvas CA 28011:
+               - 50% dos funcionários trocam a cada 2 semanas
+               - 50% dos funcionários trocam a cada 1 mês
+               - Necessário manter estoque adequado para alta rotatividade
+            
+            3. Cinto de Segurança:
+               - Troca programada a cada 6 meses
+            
+            4. Uniformes (Camisas e Calças):
+               - Troca mínima a cada 6 meses
+               - Considerar necessidade de trocas extras em casos específicos
+            
+            Com base nos dados fornecidos, analise de forma minimalista (direto ao ponto):
+            1. Quais itens estão com estoque baixo e precisam ser reabastecidos
+            2. Quais itens têm alto consumo e devem ter prioridade de compra
+            3. Se existe algum padrão de consumo que deva ser considerado
+            4. Uma lista de recomendações de compra com quantidades sugeridas, considerando:
+               - Os tamanhos necessários
+               - A periodicidade de troca de cada EPI
+            5. Sugestão de cronograma de compras para evitar:
+               - Excesso de estoque que possa deteriorar
+            6. Quando indicar compra seja especifico, indique o EPI o CA e a quantidade especifica.   
             """
             response = self.model.generate_content(context)
+            recommendations = response.text
             
-            try:
-                recommendations = response.text
-            except ValueError:
-                recommendations = "A IA não conseguiu gerar recomendações."
+            st.success("Análise de estoque concluída com sucesso.")
             
-            return {"recommendations": recommendations}
+            return {
+                "recommendations": recommendations,
+                "timestamp": time.time()
+            }
             
         except Exception as e:
             st.error(f"Erro ao analisar o estoque: {str(e)}")
-            return {"error": f"Ocorreu um erro ao analisar o estoque: {str(e)}"}
+            st.exception(e)
+            return {
+                "error": f"Ocorreu um erro ao analisar o estoque: {str(e)}",
+                "timestamp": time.time()
+            }
 
-    def generate_annual_forecast(self, short_term_report: str, purchase_history):
+    def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
         """
-        Pega o relatório de curto prazo, projeta para 12 meses e calcula o orçamento.
+        Gera uma previsão orçamentária para os próximos meses usando IA.
         """
         try:
-            st.info("Projetando recomendação para 12 meses e calculando orçamento...")
+            st.info("Iniciando a geração da previsão orçamentária...")
+            
+            if not usage_history:
+                return {"error": "Histórico de uso insuficiente para gerar previsão."}
+            if not purchase_history:
+                return {"error": "Histórico de compras insuficiente para calcular custos."}
 
-            if not purchase_history: return {"error": "Histórico de compras insuficiente para calcular custos."}
+            # --- 1. Preparação dos Dados ---
+            df_usage = pd.DataFrame(usage_history)
+            df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
+            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce')
+            df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
 
             df_purchase = pd.DataFrame(purchase_history)
-            df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
-            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
-            
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Converte a data e REMOVE qualquer linha onde a data for inválida (NaT)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
+            # Limpa e converte o valor para numérico
+            df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+            df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
+            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-            
-            if df_purchase.empty:
-                return {"error": "Não há dados de compra válidos para calcular os custos."}
 
-            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
+            # --- 2. Calcular Custo Unitário Mais Recente ---
+            st.info("Calculando custos unitários mais recentes...")
+            # Calcula o custo unitário em cada compra
+            df_purchase = df_purchase[df_purchase['quantity'] > 0]
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            
-            # A ordenação agora é segura
-            latest_costs_df = df_purchase.sort_values(by='date').drop_duplicates('epi_name', keep='last')
-            
-            unit_costs_str = "EPI | Custo Unit. (R$)\n---|---\n"
-            for _, row in latest_costs_df.iterrows():
-                unit_costs_str += f"{row['epi_name']} | {row['unit_cost']:.2f}\n"
+            # Pega o custo unitário da compra mais recente de cada EPI
+            latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
+            unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
 
+            # --- 3. Calcular Consumo Médio Mensal ---
+            st.info("Analisando consumo histórico mensal...")
+            # Filtra dados do último ano para uma previsão mais relevante
+            one_year_ago = datetime.now() - timedelta(days=365)
+            df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
+            
+            # Agrupa por mês e por EPI
+            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M', on='date')['quantity'].sum()
+            # Calcula a média mensal para cada EPI
+            avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
+
+            # --- 4. Gerar a Previsão ---
+            st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
+            forecast = []
+            total_forecast_cost = 0
+            
+            for epi_name, avg_consumption in avg_monthly_consumption.items():
+                projected_qty = np.ceil(avg_consumption * forecast_months) # Arredonda para cima
+                unit_cost = unit_costs.get(epi_name, 0) # Pega o custo, ou 0 se não houver registro de compra
+                projected_cost = projected_qty * unit_cost
+                total_forecast_cost += projected_cost
+                
+                forecast.append({
+                    "EPI": epi_name,
+                    "Quantidade Prevista": int(projected_qty),
+                    "Custo Unitário (R$)": f"{unit_cost:.2f}",
+                    "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
+                })
+            
+            # Converte a previsão para um DataFrame para formatar para a IA
+            df_forecast = pd.DataFrame(forecast)
+
+            # --- 5. Montar o Prompt para a IA ---
+            st.info("Enviando dados para a IA gerar o relatório...")
             prompt = f"""
-            **Sua Tarefa:** Você é um analista financeiro. Sua tarefa é pegar um relatório de recomendação de compra de 3 meses e projetá-lo para um período de 12 meses, calculando o orçamento anual total.
+            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre que foram calculados, gere um relatório orçamentário formal.
 
-            **Dados de Entrada:**
+            Dados da Previsão Calculada:
+            {df_forecast.to_string(index=False)}
 
-            **1. Relatório de Recomendação de Compra (Base para 3 meses):**
-            ```markdown
-            {short_term_report}
-            ```
+            Custo Total Previsto para o Período: R$ {total_forecast_cost:.2f}
 
-            **2. Tabela de Custos Unitários Recentes (R$):**
-            ```
-            {unit_costs_str}
-            ```
-
-            **Instruções:**
-            1.  **Leia** a seção "Recomendações de Compra (Lista Detalhada)" do relatório.
-            2.  **Projete a Quantidade Anual:** Para cada item listado, multiplique a quantidade recomendada por 4 para obter a projeção para 12 meses. Arredonde para o número inteiro mais próximo.
-            3.  **Calcule o Custo Total por Item:** Usando a tabela de custos, encontre o custo unitário de cada EPI e multiplique pela "Quantidade Anual".
-            4.  **Calcule o Orçamento Total Anual:** Some todos os custos totais por item.
-            5.  **Formate a Saída** em um relatório Markdown claro, contendo:
-                - Um título: `### Previsão Orçamentária Anual de Compras`
-                - Um subtítulo com o orçamento total que você calculou.
-                - Uma tabela final com as colunas: `EPI`, `Qtd. Anual Recomendada`, `Custo Unit. (R$)`, `Custo Total (R$)`.
-            
-            **Seja preciso nos cálculos e direto na formatação.**
+            O relatório deve conter:
+            1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
+            2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
+            3.  **Recomendações Estratégicas:** Com base na tabela, forneça duas recomendações. Por exemplo, sugira negociar preços para itens de alto custo ou revisar a frequência de troca de itens de alto volume. Seja direto e prático.
             """
 
+            # --- 6. Chamar a IA ---
             response = self.model.generate_content(prompt)
-            try:
-                final_report = response.text
-            except ValueError:
-                final_report = "A IA não conseguiu gerar a previsão orçamentária (bloqueio de segurança)."
-
-            st.success("Previsão anual e orçamento gerados com sucesso!")
-            return {"report": final_report}
+            st.success("Relatório de previsão orçamentária gerado com sucesso!")
+            return {"report": response.text}
 
         except Exception as e:
-            # Captura a exceção real e a formata como string
-            error_message = f"Um erro inesperado ocorreu: {str(e)}"
-            st.error(error_message)
-            return {"error": error_message}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
+            st.exception(e)
+            return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
 
 
 
