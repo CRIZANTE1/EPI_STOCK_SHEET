@@ -107,39 +107,66 @@ def ai_recommendations_page():
                         st.markdown("---")
 
         with tab2:
-            st.subheader("Previsão Orçamentária Trimestral com IA")
-            st.write("Esta ferramenta analisa o consumo histórico para projetar os custos com EPIs para os próximos 3 meses.")
-
-            if st.button("Gerar Previsão Orçamentária"):
-                with st.spinner("IA analisando histórico de consumo e custos para gerar a previsão..."):
-                    forecast_result = ai_engine.generate_budget_forecast(
+            st.subheader("Previsão Orçamentária Anual (12 Meses)")
+            st.write("Esta ferramenta analisa o consumo histórico, a necessidade direta de uniformes/calçados e o estoque atual para gerar uma lista de compras completa para o próximo ano.")
+    
+            if st.button("Gerar Previsão Anual"):
+                with st.spinner("Analisando todos os dados e gerando a previsão..."):
+                    # Chama a função correta, que agora faz todos os cálculos em Python
+                    forecast_result = ai_engine.generate_annual_forecast(
                         usage_history,
                         purchase_history,
-                        forecast_months=3
+                        stock_data,
+                        employee_data, # Passando os dados dos funcionários
+                        forecast_months=12
                     )
                     
-                    if "error" in forecast_result:
-                        st.error(forecast_result["error"])
-                    else:
-                        st.session_state.latest_forecast = forecast_result["report"]
-                        if 'forecast_history' not in st.session_state:
-                            st.session_state.forecast_history = []
-                        st.session_state.forecast_history.append({
-                            "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                            "report": forecast_result["report"]
-                        })
-
-            if 'latest_forecast' in st.session_state:
-                st.markdown("### Última Previsão Gerada")
-                st.markdown(st.session_state.latest_forecast)
-
+                    # Salva o resultado no estado da sessão
+                    st.session_state.latest_forecast_result = forecast_result
+                    
+                    # Inicializa o histórico se não existir
+                    if 'forecast_history' not in st.session_state:
+                        st.session_state.forecast_history = []
+                    
+                    # Adiciona o resultado completo ao histórico
+                    st.session_state.forecast_history.append({
+                        "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                        "result": forecast_result 
+                    })
+            
+            # Bloco para exibir o resultado mais recente
+            if 'latest_forecast_result' in st.session_state:
+                result = st.session_state.latest_forecast_result
+                
+                st.markdown("---")
+                
+                if "error" in result:
+                    st.error(result["error"])
+                else:
+                    report_text = result.get("report", "Nenhum relatório gerado.")
+                    
+                    # Exibe o relatório (que já contém o título, custo total e a tabela)
+                    st.markdown(report_text)
+                    
+                    # Botão de Download do PDF
+                    st.markdown("---")
+                    pdf_buffer = create_forecast_pdf_from_report(report_text)
+                    st.download_button(
+                        label="📥 Baixar Previsão Anual em PDF",
+                        data=pdf_buffer,
+                        file_name=f"Previsao_Anual_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                        mime="application/pdf"
+                    )
+    
+            # Bloco para exibir o histórico de previsões
             if 'forecast_history' in st.session_state and st.session_state.forecast_history:
-                with st.expander("Ver Histórico de Previsões Orçamentárias"):
+                with st.expander("Ver Histórico de Previsões Anuais"):
                     for rec in reversed(st.session_state.forecast_history):
                         st.markdown(f"**Previsão de {rec['timestamp']}**")
-                        st.markdown(rec["report"])
+                        history_result = rec.get("result", {})
+                        if "error" in history_result:
+                            st.error(history_result["error"])
+                        else:
+                            st.markdown(history_result.get("report", "Relatório não disponível."))
                         st.markdown("---")
 
-    except Exception as e:
-        st.error(f"Erro ao processar dados para a análise de IA: {str(e)}")
-        st.exception(e)
