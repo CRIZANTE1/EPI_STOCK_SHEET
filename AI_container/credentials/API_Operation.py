@@ -136,17 +136,26 @@ class PDFQA:
         try:
             st.info("Projetando recomendação para 12 meses e calculando orçamento...")
 
-            if not purchase_history: return {"error": "Histórico de compras insuficiente."}
+            if not purchase_history: return {"error": "Histórico de compras insuficiente para calcular custos."}
 
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
             df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
+            
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Converte a data e REMOVE qualquer linha onde a data for inválida (NaT)
+            df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
+            
+            if df_purchase.empty:
+                return {"error": "Não há dados de compra válidos para calcular os custos."}
+
             df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            latest_costs_df = df_purchase.sort_values(by=pd.to_datetime(df_purchase['date'], errors='coerce')).drop_duplicates('epi_name', keep='last')
             
-            # Tenta criar um dicionário de custos com nomes normalizados
+            # A ordenação agora é segura
+            latest_costs_df = df_purchase.sort_values(by='date').drop_duplicates('epi_name', keep='last')
+            
             unit_costs_str = "EPI | Custo Unit. (R$)\n---|---\n"
             for _, row in latest_costs_df.iterrows():
                 unit_costs_str += f"{row['epi_name']} | {row['unit_cost']:.2f}\n"
@@ -183,14 +192,17 @@ class PDFQA:
             try:
                 final_report = response.text
             except ValueError:
-                final_report = "A IA não conseguiu gerar a previsão orçamentária."
+                final_report = "A IA não conseguiu gerar a previsão orçamentária (bloqueio de segurança)."
 
             st.success("Previsão anual e orçamento gerados com sucesso!")
             return {"report": final_report}
 
         except Exception as e:
-            st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
-            return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+            # Captura a exceção real e a formata como string
+            error_message = f"Um erro inesperado ocorreu: {str(e)}"
+            st.error(error_message)
+            return {"error": error_message}
+
 
 
 
