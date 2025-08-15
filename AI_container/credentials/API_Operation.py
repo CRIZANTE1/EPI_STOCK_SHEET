@@ -17,7 +17,7 @@ from datetime import datetime
 class PDFQA:
     def __init__(self):
         load_api()  
-        self.model = genai.GenerativeModel('gemini-2.5-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         self.embedding_model = 'models/embedding-001'
 
     @staticmethod
@@ -297,6 +297,7 @@ class PDFQA:
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
     
     
+
 
 
 
