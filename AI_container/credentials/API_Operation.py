@@ -202,98 +202,125 @@ class PDFQA:
                 "timestamp": time.time()
             }
 
-    def generate_budget_forecast(self, usage_history, purchase_history, forecast_months=3):
+    def generate_purchase_recommendation(self, usage_history, purchase_history, stock_data, employee_data, forecast_months=3):
         """
-        Gera uma previsão orçamentária para os próximos meses usando IA.
+        Gera uma análise de estoque completa e uma lista de compras projetada para um
+        determinado número de meses.
         """
         try:
-            st.info("Iniciando a geração da previsão orçamentária...")
+            period_text = "Trimestral" if forecast_months == 3 else f"para {forecast_months} Meses"
+            st.info(f"Iniciando análise de necessidades ({period_text})...")
             
-            if not usage_history:
-                return {"error": "Histórico de uso insuficiente para gerar previsão."}
-            if not purchase_history:
-                return {"error": "Histórico de compras insuficiente para calcular custos."}
-
-            # --- 1. Preparação dos Dados ---
+            # --- 1. Preparação dos Dados (mesma lógica robusta) ---
+            if not usage_history: return {"error": "Histórico de uso insuficiente."}
+            if not purchase_history: return {"error": "Histórico de compras insuficiente."}
+            if not employee_data: return {"error": "Dados de funcionários não carregados."}
+            
             df_usage = pd.DataFrame(usage_history)
             df_usage['date'] = pd.to_datetime(df_usage['date'], errors='coerce')
-            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce')
+            df_usage['quantity'] = pd.to_numeric(df_usage['quantity'], errors='coerce').fillna(0)
             df_usage.dropna(subset=['date', 'quantity', 'epi_name'], inplace=True)
-
+            
             df_purchase = pd.DataFrame(purchase_history)
             df_purchase['date'] = pd.to_datetime(df_purchase['date'], errors='coerce')
-            # Limpa e converte o valor para numérico
-            df_purchase['value'] = df_purchase['value'].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-            df_purchase['value'] = pd.to_numeric(df_purchase['value'], errors='coerce')
-            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce')
+            df_purchase['value'] = df_purchase['value'].apply(PDFQA.clean_monetary_value)
+            df_purchase['quantity'] = pd.to_numeric(df_purchase['quantity'], errors='coerce').fillna(0)
             df_purchase.dropna(subset=['date', 'value', 'quantity', 'epi_name'], inplace=True)
-
-            # --- 2. Calcular Custo Unitário Mais Recente ---
-            st.info("Calculando custos unitários mais recentes...")
-            # Calcula o custo unitário em cada compra
-            df_purchase = df_purchase[df_purchase['quantity'] > 0]
+            
+            df_employees = pd.DataFrame(employee_data[1:], columns=employee_data[0])
+            df_purchase = df_purchase[df_purchase['quantity'] > 0].copy()
             df_purchase['unit_cost'] = df_purchase['value'] / df_purchase['quantity']
-            # Pega o custo unitário da compra mais recente de cada EPI
             latest_costs_df = df_purchase.sort_values('date').drop_duplicates('epi_name', keep='last')
             unit_costs = latest_costs_df.set_index('epi_name')['unit_cost'].to_dict()
 
-            # --- 3. Calcular Consumo Médio Mensal ---
-            st.info("Analisando consumo histórico mensal...")
-            # Filtra dados do último ano para uma previsão mais relevante
-            one_year_ago = datetime.now() - timedelta(days=365)
-            df_usage_recent = df_usage[df_usage['date'] >= one_year_ago]
+            # --- 2. Cálculo da Necessidade Direta (Uniformes e Calçados) ---
+            needs_from_employees = {}
+            employee_need_mapping = {
+                'Tamanho Calça': ('CALÇA', 'Quantidade de Calças'),
+                'Tamanho do calçado': ('BOTINA', 'Quantidade de Calçado'),
+                'Tamanho Camisa Manga Comprida': ('CAMISA', 'Quantidade de Camisas'),
+                'Tamanho Camisa Polo': ('CAMISA POLO', 'Quantidade de Camisa Polo')
+            }
+            # Fator de troca (2x por ano para itens semestrais)
+            exchange_factor = forecast_months / 6.0
             
-            # Agrupa por mês e por EPI
-            monthly_consumption = df_usage_recent.groupby('epi_name').resample('M', on='date')['quantity'].sum()
-            # Calcula a média mensal para cada EPI
-            avg_monthly_consumption = monthly_consumption.groupby('epi_name').mean()
+            for size_col, (epi_prefix, qty_col) in employee_need_mapping.items():
+                if size_col in df_employees.columns and qty_col in df_employees.columns:
+                    df_employees[qty_col] = pd.to_numeric(df_employees[qty_col], errors='coerce').fillna(0)
+                    size_needs = df_employees.groupby(size_col)[qty_col].sum()
+                    for size, total_qty in size_needs.items():
+                        if total_qty > 0 and pd.notna(size) and str(size).strip() != '-':
+                            projected_qty = np.ceil(total_qty * exchange_factor)
+                            # Tenta encontrar um nome de produto completo
+                            found_name = next((name for name in {**stock_data, **unit_costs}.keys() if epi_prefix in name.upper() and str(size).split(' ')[0] in name), None)
+                            final_epi_name = found_name if found_name else f"{epi_prefix} TAMANHO {size}"
+                            needs_from_employees[final_epi_name] = needs_from_employees.get(final_epi_name, 0) + projected_qty
 
-            # --- 4. Gerar a Previsão ---
-            st.info(f"Projetando necessidades para os próximos {forecast_months} meses...")
-            forecast = []
-            total_forecast_cost = 0
-            
-            for epi_name, avg_consumption in avg_monthly_consumption.items():
-                projected_qty = np.ceil(avg_consumption * forecast_months) # Arredonda para cima
-                unit_cost = unit_costs.get(epi_name, 0) # Pega o custo, ou 0 se não houver registro de compra
-                projected_cost = projected_qty * unit_cost
-                total_forecast_cost += projected_cost
+            # --- 3. Cálculo da Necessidade por Consumo (Outros EPIs) ---
+            excluded_prefixes = ['CALÇA', 'BOTINA', 'CAMISA']
+            df_usage_others = df_usage[~df_usage['epi_name'].str.upper().str.contains('|'.join(excluded_prefixes), na=False)]
+            needs_from_consumption = {}
+            if not df_usage_others.empty:
+                total_days = (df_usage_others['date'].max() - df_usage_others['date'].min()).days
+                num_months_in_data = total_days / 30.44 if total_days > 0 else 1
+                if num_months_in_data < 1: num_months_in_data = 1
                 
-                forecast.append({
-                    "EPI": epi_name,
-                    "Quantidade Prevista": int(projected_qty),
-                    "Custo Unitário (R$)": f"{unit_cost:.2f}",
-                    "Custo Total Previsto (R$)": f"{projected_cost:.2f}"
-                })
+                total_consumption = df_usage_others.groupby('epi_name')['quantity'].sum()
+                avg_monthly_consumption = total_consumption / num_months_in_data
+                for epi_name, avg_consumption in avg_monthly_consumption.items():
+                    needs_from_consumption[epi_name] = np.ceil(avg_monthly_consumption * forecast_months)
+
+            # --- 4. Unificação, Regras de Negócio e Geração do Relatório ---
+            total_projected_needs = needs_from_employees.copy()
+            total_projected_needs.update(needs_from_consumption)
             
-            # Converte a previsão para um DataFrame para formatar para a IA
-            df_forecast = pd.DataFrame(forecast)
+            recommendation_list = []
+            for epi_name, projected_qty in total_projected_needs.items():
+                current_stock = stock_data.get(epi_name, 0)
+                needed_qty = max(0, projected_qty - current_stock)
+                
+                if 0 < current_stock <= 5 and needed_qty < 2:
+                    needed_qty = 2
 
-            # --- 5. Montar o Prompt para a IA ---
-            st.info("Enviando dados para a IA gerar o relatório...")
-            prompt = f"""
-            Você é um analista de segurança do trabalho e finanças. Com base nos dados de previsão de consumo de EPIs para o próximo trimestre que foram calculados, gere um relatório orçamentário formal.
+                if needed_qty > 0:
+                    unit_cost = unit_costs.get(epi_name.strip(), 0.0)
+                    total_cost = needed_qty * unit_cost
+                    recommendation_list.append({
+                        "EPI": epi_name.strip(),
+                        "Qtd. a Comprar": int(needed_qty),
+                        "Custo Unit. (R$)": unit_cost,
+                        "Custo Total (R$)": total_cost
+                    })
 
-            Dados da Previsão Calculada:
-            {df_forecast.to_string(index=False)}
+            if not recommendation_list:
+                return {"report": f"## Previsão para {forecast_months} Meses\n\nO estoque atual é suficiente. Nenhuma compra recomendada.", "total_cost": 0}
+            
+            df_recommendation = pd.DataFrame(recommendation_list)
+            df_recommendation = df_recommendation.sort_values(by="Custo Total (R$)", ascending=False)
+            
+            final_total_cost = df_recommendation['Custo Total (R$)'].sum()
+            formatted_total_cost = '{:_.2f}'.format(final_total_cost).replace('.', ',').replace('_', '.')
+            
+            # Formatação para exibição
+            df_display = df_recommendation.copy()
+            df_display['Custo Unit. (R$)'] = df_display['Custo Unit. (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
+            df_display['Custo Total (R$)'] = df_display['Custo Total (R$)'].map('{:,.2f}'.format).str.replace(',', 'v').str.replace('.', ',').str.replace('v', '.')
 
-            Custo Total Previsto para o Período: R$ {total_forecast_cost:.2f}
+            # Montagem do Relatório Final (sem IA para formatação, garantindo precisão)
+            report_title = f"### Lista de Compras Recomendada - Previsão para {forecast_months} Meses"
+            report_subtitle = f"#### Orçamento Total Estimado: R$ {formatted_total_cost}"
+            table_md = df_display.to_markdown(index=False)
+            
+            final_report = f"{report_title}\n{report_subtitle}\n\n{table_md}"
 
-            O relatório deve conter:
-            1.  **Resumo Executivo:** Um parágrafo curto resumindo a necessidade orçamentária total e destacando os 2-3 itens de maior custo.
-            2.  **Tabela de Previsão:** Apresente os dados fornecidos em uma tabela formatada em Markdown.
-            3.  **Recomendações Estratégicas:** Com base na tabela, forneça duas recomendações. Por exemplo, sugira negociar preços para itens de alto custo ou revisar a frequência de troca de itens de alto volume. Seja direto e prático.
-            """
-
-            # --- 6. Chamar a IA ---
-            response = self.model.generate_content(prompt)
-            st.success("Relatório de previsão orçamentária gerado com sucesso!")
-            return {"report": response.text}
+            st.success("Previsão de compras gerada com sucesso!")
+            return {"report": final_report, "total_cost": final_total_cost}
 
         except Exception as e:
-            st.error(f"Erro ao gerar previsão orçamentária: {str(e)}")
+            st.error(f"Erro ao gerar previsão de compras: {str(e)}")
             st.exception(e)
             return {"error": f"Ocorreu um erro inesperado: {str(e)}"}
+
 
 
 
