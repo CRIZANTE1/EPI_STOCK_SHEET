@@ -5,6 +5,33 @@ from datetime import datetime
 from Utils.pdf_generator import create_epi_ficha_html
 from auth.auth_utils import get_user_display_name
 
+def show_employee_emission_history(sheet_ops, employee_name):
+    st.header("5. Histórico de Emissões da Ficha")
+    
+    @st.cache_data(ttl=300)
+    def load_history_data():
+        history_data = sheet_ops.carregar_dados_aba('emission_history')
+        return history_data
+
+    history_data = load_history_data()
+
+    if not history_data or len(history_data) <= 1:
+        st.info("Nenhum histórico de emissão encontrado para este funcionário.")
+        return
+
+    columns = history_data[0][:3]
+    data = [row[:3] for row in history_data[1:]]
+    df_history = pd.DataFrame(data, columns=columns)
+    
+    df_employee_history = df_history[df_history['employee_name'] == employee_name]
+    
+    if df_employee_history.empty:
+        st.info("Nenhum histórico de emissão encontrado para este funcionário.")
+        return
+
+    df_employee_history = df_employee_history.sort_values(by='emission_date', ascending=False)
+    st.dataframe(df_employee_history, hide_index=True)
+
 def generate_ficha_page():
     st.title("📄 Gerar Ficha de Controle de EPI")
 
@@ -104,3 +131,5 @@ def generate_ficha_page():
             
             if gerar_disabled:
                  st.warning("Preencha os campos 'Registro', 'Setor' e 'Cargo' para habilitar a geração da ficha.")
+
+        show_employee_emission_history(sheet_operations, selected_employee)
