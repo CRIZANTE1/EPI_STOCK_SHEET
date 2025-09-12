@@ -3,6 +3,7 @@ import pandas as pd
 from End.Operations import SheetOperations
 from datetime import datetime
 from Utils.pdf_generator import create_epi_ficha_html
+from auth.auth_utils import get_user_display_name
 
 def generate_ficha_page():
     st.title("📄 Gerar Ficha de Controle de EPI")
@@ -78,7 +79,6 @@ def generate_ficha_page():
 
             st.header("4. Gerar Ficha")
             
-            # Desabilita o botão se algum campo de informação do funcionário estiver vazio.
             gerar_disabled = any(not f for f in [registro, setor, cargo])
 
             if st.button("Gerar Ficha em PDF", disabled=gerar_disabled):
@@ -90,8 +90,10 @@ def generate_ficha_page():
                 }
                 
                 with st.spinner("Gerando PDF a partir do HTML..."):
-                    # CORREÇÃO: Chamando a função correta que usa weasyprint
                     pdf_buffer = create_epi_ficha_html(employee_info, epi_records)
+                    
+                    emitter_name = get_user_display_name()
+                    sheet_operations.add_emission_history(selected_employee, emitter_name)
                     
                     st.download_button(
                         label="📥 Baixar Ficha PDF",

@@ -6,6 +6,7 @@ from Front.generate_ficha_page import generate_ficha_page
 from Front.alerts_page import alerts_page
 from Front.analytics_page import analytics_page  
 from Front.ca_lookup_page import ca_lookup_page 
+from Front.history_page import show_history_page
 
 from auth import (
     show_login_page,
@@ -45,6 +46,9 @@ def main():
             if st.button("📄 Gerar Ficha de EPI", use_container_width=True):
                 st.session_state.pagina_atual = 'gerar_ficha'
 
+            if st.button("📜 Histórico de Emissões", use_container_width=True):
+                st.session_state.pagina_atual = 'historico'
+
             if st.button("🔎 Consultar CA", use_container_width=True):
                 st.session_state.pagina_atual = 'consulta_ca'
 
@@ -72,6 +76,8 @@ def main():
         alerts_page()
     elif pagina == 'gerar_ficha' and can_edit():
         generate_ficha_page()
+    elif pagina == 'historico' and can_edit():
+        show_history_page()
     elif pagina == 'consulta_ca' and can_edit():
         ca_lookup_page()
     elif pagina == 'ai_recommendations' and is_admin(): 

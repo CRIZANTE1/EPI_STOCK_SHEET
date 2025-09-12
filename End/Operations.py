@@ -132,6 +132,33 @@ class SheetOperations:
             logging.error(f"Erro ao excluir dados: {e}", exc_info=True)
             return False
         
+    def ensure_emission_history_sheet_exists(self):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return
+        try:
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            sheet_title = 'emission_history'
+            if sheet_title not in [sheet.title for sheet in archive.worksheets()]:
+                aba = archive.add_worksheet(sheet_title, rows=1, cols=3)
+                aba.update_row(1, ['employee_name', 'emission_date', 'emitter_name'])
+                logging.info(f"Aba '{sheet_title}' criada com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao verificar/criar a aba 'emission_history': {e}", exc_info=True)
+
+    def add_emission_history(self, employee_name, emitter_name):
+        if not self.credentials or not self.my_archive_google_sheets:
+            return
+        try:
+            self.ensure_emission_history_sheet_exists()
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('emission_history')
+            emission_date = pd.to_datetime('today').strftime('%Y-%m-%d %H:%M:%S')
+            new_row = [employee_name, emission_date, emitter_name]
+            aba.append_table(values=new_row)
+            logging.info(f"Histórico de emissão adicionado para {employee_name}.")
+        except Exception as e:
+            logging.error(f"Erro ao adicionar histórico de emissão: {e}", exc_info=True)
+
 # Em implemação -----------------------------------------------------------------------------
     def add_user(self, user_data):
         
