@@ -18,7 +18,9 @@ def show_history_page():
         st.info("Nenhum histórico de emissão encontrado.")
         return
 
-    df_history = pd.DataFrame(history_data[1:], columns=history_data[0])
+    columns = history_data[0][:3]
+    data = [row[:3] for row in history_data[1:]]
+    df_history = pd.DataFrame(data, columns=columns)
     df_history = df_history.sort_values(by='emission_date', ascending=False)
 
     st.dataframe(df_history, hide_index=True)
