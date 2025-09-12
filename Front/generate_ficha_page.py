@@ -23,7 +23,7 @@ def show_employee_emission_history(sheet_ops, employee_name):
     data = [row[:3] for row in history_data[1:]]
     df_history = pd.DataFrame(data, columns=columns)
     
-    df_employee_history = df_history[df_history['employee_name'] == employee_name]
+    df_employee_history = df_history[df_history['employee_name'].str.strip() == employee_name.strip()]
     
     if df_employee_history.empty:
         st.info("Nenhum histórico de emissão encontrado para este funcionário.")
