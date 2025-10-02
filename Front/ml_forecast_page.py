@@ -65,11 +65,13 @@ def ml_forecast_page():
     st.markdown("---")
     
     # Tabs principais
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, TAB 5 = st.tabs([
         "📊 Previsão de Demanda", 
         "🎯 Recomendações de Compra", 
         "📈 Análise de Sazonalidade",
-        "🔍 Métricas dos Modelos"
+        "🔍 Métricas dos Modelos",
+        "⚡ Análise de Performance"
+        
     ])
     
     # TAB 1: PREVISÃO
@@ -553,7 +555,234 @@ def ml_forecast_page():
                 else:
                     st.error("Dados insuficientes para treinar os modelos. São necessários pelo menos 30 dias de histórico.")
         
-        # Informações adicionais sobre os modelos
+
+    with tab5:
+        st.subheader("⚡ Análise de Performance e Backtesting")
+        
+        st.markdown("""
+        Valide a precisão dos modelos através de testes rigorosos:
+        - **Backtesting**: Simula previsões no passado para validar acurácia
+        - **Comparação de Métodos**: Compara ML com métodos tradicionais
+        """)
+        
+        from ML.performance_analyzer import PerformanceAnalyzer
+        
+        analyzer = PerformanceAnalyzer()
+        
+        # Subtabs
+        subtab1, subtab2, subtab3 = st.tabs([
+            "🔄 Backtest Individual",
+            "🏆 Comparação de Métodos",
+            "📊 Relatório Completo"
+        ])
+        
+        with subtab1:
+            st.markdown("### Backtest de Modelo Individual")
+            
+            selected_epi_backtest = st.selectbox(
+                "Selecione o EPI:",
+                sorted(df_prepared['epi_name'].unique()),
+                key="epi_backtest"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                train_days = st.number_input(
+                    "Dias de treino:",
+                    min_value=30,
+                    max_value=365,
+                    value=180
+                )
+            with col2:
+                test_days = st.number_input(
+                    "Dias de teste:",
+                    min_value=7,
+                    max_value=90,
+                    value=30
+                )
+            
+            if st.button("🚀 Executar Backtest", type="primary", key="btn_backtest"):
+                with st.spinner("Executando backtest... Isso pode levar alguns minutos."):
+                    backtest_result = analyzer.backtest_model(
+                        df_prepared,
+                        selected_epi_backtest,
+                        train_days,
+                        test_days
+                    )
+                    
+                    if backtest_result:
+                        st.success("Backtest concluído!")
+                        
+                        # Métricas principais
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("MAE Médio", f"{backtest_result['avg_mae']:.2f}")
+                        col2.metric("RMSE Médio", f"{backtest_result['avg_rmse']:.2f}")
+                        col3.metric("MAPE Médio", f"{backtest_result['avg_mape']:.1f}%")
+                        col4.metric("Testes Realizados", backtest_result['num_backtests'])
+                        
+                        # Gráfico
+                        fig = analyzer.plot_backtest_results(backtest_result)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Interpretação
+                        st.markdown("### 📖 Interpretação dos Resultados")
+                        
+                        mape = backtest_result['avg_mape']
+                        if mape < 10:
+                            st.success(f"✅ Excelente! MAPE de {mape:.1f}% indica alta precisão.")
+                        elif mape < 20:
+                            st.info(f"ℹ️ Bom! MAPE de {mape:.1f}% indica precisão aceitável.")
+                        elif mape < 30:
+                            st.warning(f"⚠️ Moderado. MAPE de {mape:.1f}% indica que há espaço para melhoria.")
+                        else:
+                            st.error(f"❌ MAPE de {mape:.1f}% indica baixa precisão. Considere revisar os dados.")
+                        
+                        # Tabela de resultados
+                        with st.expander("📋 Ver Resultados Detalhados"):
+                            st.dataframe(
+                                backtest_result['results'],
+                                hide_index=True,
+                                use_container_width=True
+                            )
+                    else:
+                        st.error("Não foi possível executar o backtest. Verifique se há dados suficientes.")
+        
+        with subtab2:
+            st.markdown("### Comparação entre Métodos de Previsão")
+            
+            st.info("""
+            Compare o desempenho do ML Ensemble com métodos tradicionais:
+            - **Naive**: Usa o último valor conhecido
+            - **Moving Average**: Média dos últimos 7 dias
+            - **Exponential Smoothing**: Suavização exponencial
+            - **ML Ensemble**: XGBoost + Prophet
+            """)
+            
+            selected_epi_comp = st.selectbox(
+                "Selecione o EPI:",
+                sorted(df_prepared['epi_name'].unique()),
+                key="epi_comparison"
+            )
+            
+            if st.button("🏆 Comparar Métodos", type="primary", key="btn_compare"):
+                with st.spinner("Comparando diferentes métodos de previsão..."):
+                    comparison_result = analyzer.compare_forecast_methods(
+                        df_prepared,
+                        selected_epi_comp
+                    )
+                    
+                    if comparison_result:
+                        st.success("Comparação concluída!")
+                        
+                        # Tabela de comparação
+                        st.markdown("### 📊 Ranking de Métodos")
+                        
+                        comp_table = comparison_result['comparison_table'].copy()
+                        comp_table['MAE'] = comp_table['MAE'].apply(lambda x: f"{x:.2f}")
+                        comp_table['RMSE'] = comp_table['RMSE'].apply(lambda x: f"{x:.2f}")
+                        comp_table['Rank'] = comp_table['Rank'].apply(lambda x: f"#{int(x)}")
+                        
+                        st.dataframe(
+                            comp_table,
+                            use_container_width=True,
+                            column_config={
+                                'Rank': st.column_config.TextColumn('Posição')
+                            }
+                        )
+                        
+                        # Identificar o melhor método
+                        best_method = comp_table.index[0]
+                        st.success(f"🏆 **Melhor Método**: {best_method}")
+                        
+                        # Gráfico comparativo
+                        fig = analyzer.plot_method_comparison(comparison_result)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Insights
+                        st.markdown("### 💡 Insights")
+                        
+                        if best_method == "ML Ensemble":
+                            st.info("""
+                            ✅ O ML Ensemble demonstrou o melhor desempenho, justificando o uso de 
+                            algoritmos mais complexos para este EPI. Os modelos de Machine Learning 
+                            estão capturando padrões que métodos tradicionais não conseguem identificar.
+                            """)
+                        else:
+                            st.warning(f"""
+                            ⚠️ O método {best_method} obteve melhor desempenho neste caso. 
+                            Isso pode indicar que os dados para este EPI têm padrões simples que 
+                            não justificam o uso de ML, ou que há necessidade de mais dados de treino.
+                            """)
+                    else:
+                        st.error("Não foi possível executar a comparação.")
+        
+        with subtab3:
+            st.markdown("### Relatório Completo de Performance")
+            
+            st.markdown("""
+            Gera um relatório abrangente analisando todos os EPIs do sistema.
+            
+            **Atenção**: Este processo pode levar vários minutos dependendo da quantidade de EPIs.
+            """)
+            
+            if st.button("📊 Gerar Relatório Completo", type="primary", key="btn_full_report"):
+                epi_list = df_prepared['epi_name'].unique().tolist()
+                
+                with st.spinner(f"Analisando {len(epi_list)} EPIs... Por favor aguarde."):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    report = analyzer.generate_performance_report(df_prepared, epi_list)
+                    
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    if report and report.get('summary_statistics'):
+                        st.success("Relatório gerado com sucesso!")
+                        
+                        # Resumo executivo
+                        st.markdown("### 📋 Resumo Executivo")
+                        
+                        stats = report['summary_statistics']
+                        
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("MAE Geral", f"{stats['overall_mae']:.2f}")
+                        col2.metric("RMSE Geral", f"{stats['overall_rmse']:.2f}")
+                        col3.metric("MAPE Geral", f"{stats['overall_mape']:.1f}%")
+                        
+                        col1, col2 = st.columns(2)
+                        col1.success(f"🏆 Melhor EPI: **{stats['best_epi']}**")
+                        col2.error(f"⚠️ EPI com maior erro: **{stats['worst_epi']}**")
+                        
+                        # Gráfico resumo
+                        fig = analyzer.plot_performance_summary(report)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tabela detalhada
+                        with st.expander("📊 Ver Resultados Individuais"):
+                            individual_df = pd.DataFrame(report['individual_results']).T
+                            individual_df = individual_df.sort_values('avg_mae')
+                            individual_df.columns = ['MAE Médio', 'RMSE Médio', 'MAPE Médio', 'Nº Testes']
+                            st.dataframe(individual_df, use_container_width=True)
+                        
+                        # Exportar relatório
+                        import json
+                        report_json = json.dumps(report, indent=2, default=str)
+                        
+                        st.download_button(
+                            label="💾 Baixar Relatório JSON",
+                            data=report_json,
+                            file_name=f"performance_report_{datetime.now().strftime('%Y%m%d')}.json",
+                            mime="application/json"
+                        )
+                    else:
+                        st.error("Não foi possível gerar o relatório.")
+
+# Informações adicionais sobre os modelos
         with st.expander("ℹ️ Sobre os Modelos Utilizados"):
             st.markdown("""
             ### XGBoost (Extreme Gradient Boosting)
