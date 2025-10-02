@@ -1,8 +1,8 @@
 import streamlit as st
 from Front.analytics_page import analytics_page
 
-def show():
+def page_analytics():
     analytics_page()
 
 if __name__ == "__main__":
-    show()
+    page_analytics()
