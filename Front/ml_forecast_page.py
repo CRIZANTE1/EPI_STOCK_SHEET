@@ -556,6 +556,8 @@ def ml_forecast_page():
                     st.error("Dados insuficientes para treinar os modelos. São necessários pelo menos 30 dias de histórico.")
         
 
+
+
     with tab5:
         st.subheader("⚡ Análise de Performance e Backtesting")
         
@@ -781,8 +783,8 @@ def ml_forecast_page():
                         )
                     else:
                         st.error("Não foi possível gerar o relatório.")
-
-# Informações adicionais sobre os modelos
+        
+        # Informações adicionais sobre os modelos
         with st.expander("ℹ️ Sobre os Modelos Utilizados"):
             st.markdown("""
             ### XGBoost (Extreme Gradient Boosting)
@@ -794,7 +796,7 @@ def ml_forecast_page():
             **Vantagens:**
             - Alta precisão em dados tabulares
             - Captura relações não-lineares complexas
-            - Robustocheio contra overfitting
+            - Robusto contra overfitting
             - Rápido para treinar e prever
             
             **Quando usar:**
@@ -841,7 +843,6 @@ def ml_forecast_page():
     💡 **Dica**: Para melhores resultados, mantenha um histórico consistente de pelo menos 3 meses de dados.
     As previsões são atualizadas automaticamente conforme novos dados são registrados no sistema.
     """)
-
 
 if __name__ == "__main__":
     ml_forecast_page()
