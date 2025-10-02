@@ -920,6 +920,3 @@ def ml_forecast_page():
     As previsões são atualizadas automaticamente conforme novos dados são registrados no sistema.
     """)
 
-
-if __name__ == "__main__":
-    ml_forecast_page()
