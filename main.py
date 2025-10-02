@@ -17,6 +17,7 @@ from pages.consulta_ca import page_consulta_ca
 from pages.ai_analysis import page_ai_analysis
 from pages.analytics import page_analytics
 from pages.admin import page_admin
+from pages.ml_forecast import page_ml_forecast
 
 def main():
     """Função principal do aplicativo"""
@@ -50,6 +51,7 @@ def main():
     if is_admin():
         pages["⚙️ Administração"] = [
             st.Page(page_ai_analysis, title="Análise por IA", icon="🤖", url_path="ai-analysis"),
+            st.Page(page_ml_forecast, title="Previsão ML", icon="🔮", url_path="ml-forecast"),  # NOVA LINHA
             st.Page(page_analytics, title="Análise de Utilização", icon="📊", url_path="analytics"),
             st.Page(page_admin, title="Painel Administrativo", icon="⚙️", url_path="admin"),
         ]
