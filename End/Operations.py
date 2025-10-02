@@ -225,10 +225,26 @@ class SheetOperations:
         try:
             archive = self.credentials.open_by_url(self.my_archive_google_sheets)
             sheet_title = 'budget'
-            if sheet_title not in [sheet.title for sheet in archive.worksheets()]:
-                aba = archive.add_worksheet(sheet_title, rows=1, cols=3)
+            
+            # Verificar se a aba existe
+            existing_sheets = [sheet.title for sheet in archive.worksheets()]
+            
+            if sheet_title not in existing_sheets:
+                # Criar nova aba
+                aba = archive.add_worksheet(sheet_title, rows=100, cols=3)
                 aba.update_row(1, ['id', 'ano', 'valor'])
                 logging.info(f"Aba '{sheet_title}' criada com sucesso.")
+            else:
+                # Verificar se o cabeçalho está correto
+                aba = archive.worksheet_by_title(sheet_title)
+                all_values = aba.get_all_values()
+                
+                # Se estiver vazia ou sem cabeçalho correto
+                if not all_values or len(all_values) == 0 or all_values[0] != ['id', 'ano', 'valor']:
+                    aba.clear()
+                    aba.update_row(1, ['id', 'ano', 'valor'])
+                    logging.info(f"Cabeçalho da aba '{sheet_title}' corrigido.")
+                    
         except Exception as e:
             logging.error(f"Erro ao verificar/criar a aba 'budget': {e}", exc_info=True)
     
@@ -246,21 +262,31 @@ class SheetOperations:
             archive = self.credentials.open_by_url(self.my_archive_google_sheets)
             aba = archive.worksheet_by_title('budget')
             
+            # Verificar se existe cabeçalho
+            all_values = aba.get_all_values()
+            if not all_values or len(all_values) == 0:
+                # Se a planilha estiver completamente vazia, adicionar cabeçalho
+                aba.update_row(1, ['id', 'ano', 'valor'])
+                all_values = aba.get_all_values()
+            
             # Gera ID único
-            existing_ids = [row[0] for row in aba.get_all_values()[1:]]
+            existing_ids = [row[0] for row in all_values[1:] if len(row) > 0]
             while True:
                 new_id = random.randint(1000, 9999)
                 if str(new_id) not in existing_ids:
                     break
             
-            new_data = [new_id, ano, valor]
-            aba.append_table(values=[new_data])
-            logging.info("Orçamento adicionado com sucesso.")
+            # Criar nova linha como lista separada
+            new_row = [str(new_id), str(ano), str(valor)]
+            
+            # Adicionar a linha
+            aba.append_table(values=[new_row])
+            logging.info(f"Orçamento adicionado com sucesso: ID={new_id}, Ano={ano}, Valor={valor}")
             return True
         except Exception as e:
             logging.error(f"Erro ao adicionar orçamento: {e}", exc_info=True)
             return False
-    
+        
     def editar_budget(self, id, ano, valor):
         """Edita um registro de orçamento existente"""
         if not self.credentials or not self.my_archive_google_sheets:
@@ -305,4 +331,6 @@ class SheetOperations:
         except Exception as e:
             logging.error(f"Erro ao excluir orçamento: {e}", exc_info=True)
             return False
+
+    
                 
