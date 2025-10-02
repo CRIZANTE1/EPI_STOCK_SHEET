@@ -62,34 +62,47 @@ def budget_management_page():
         budget_data = sheet_operations.carregar_dados_budget()
         if budget_data and len(budget_data) > 1:
             df = pd.DataFrame(budget_data[1:], columns=budget_data[0])
-            df['valor'] = pd.to_numeric(df['valor'], errors='coerce')
-            df['ano'] = pd.to_numeric(df['ano'], errors='coerce').astype('Int64')
+            # Verificar se as colunas existem
+            if 'valor' in df.columns:
+                df['valor'] = pd.to_numeric(df['valor'], errors='coerce')
+            if 'ano' in df.columns:
+                df['ano'] = pd.to_numeric(df['ano'], errors='coerce').astype('Int64')
             return df
         return pd.DataFrame(columns=['id', 'ano', 'valor'])
     
     df_budget = load_budget_data()
     
+    # Verificar se o DataFrame está vazio ou mal formado
+    if df_budget.empty or 'ano' not in df_budget.columns or 'valor' not in df_budget.columns:
+        st.warning("⚠️ A aba 'budget' existe mas está vazia ou com estrutura incorreta.")
+        st.info("Use a opção 'Adicionar Novo Orçamento' abaixo para começar.")
+        df_budget = pd.DataFrame(columns=['id', 'ano', 'valor'])
+    
     # Calcular gastos por ano
     @st.cache_data(ttl=60)
     def calculate_spending_by_year():
-        stock_data = sheet_operations.carregar_dados()
-        if not stock_data or len(stock_data) <= 1:
+        try:
+            stock_data = sheet_operations.carregar_dados()
+            if not stock_data or len(stock_data) <= 1:
+                return pd.DataFrame(columns=['ano', 'gasto_total'])
+            
+            df = pd.DataFrame(stock_data[1:], columns=stock_data[0])
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+            df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
+            df['transaction_type'] = df['transaction_type'].str.lower().str.strip()
+            
+            # Filtrar apenas entradas
+            df_entradas = df[df['transaction_type'] == 'entrada'].copy()
+            df_entradas['ano'] = df_entradas['date'].dt.year
+            df_entradas['valor_total'] = df_entradas['quantity'] * df_entradas['value']
+            
+            gastos = df_entradas.groupby('ano')['valor_total'].sum().reset_index()
+            gastos.columns = ['ano', 'gasto_total']
+            return gastos
+        except Exception as e:
+            st.error(f"Erro ao calcular gastos: {e}")
             return pd.DataFrame(columns=['ano', 'gasto_total'])
-        
-        df = pd.DataFrame(stock_data[1:], columns=stock_data[0])
-        df['date'] = pd.to_datetime(df['date'], errors='coerce')
-        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
-        df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
-        df['transaction_type'] = df['transaction_type'].str.lower().str.strip()
-        
-        # Filtrar apenas entradas
-        df_entradas = df[df['transaction_type'] == 'entrada'].copy()
-        df_entradas['ano'] = df_entradas['date'].dt.year
-        df_entradas['valor_total'] = df_entradas['quantity'] * df_entradas['value']
-        
-        gastos = df_entradas.groupby('ano')['valor_total'].sum().reset_index()
-        gastos.columns = ['ano', 'gasto_total']
-        return gastos
     
     df_gastos = calculate_spending_by_year()
     
@@ -104,85 +117,92 @@ def budget_management_page():
         else:
             # Seletor de ano
             anos_disponiveis = sorted(df_budget['ano'].dropna().unique(), reverse=True)
-            ano_selecionado = st.selectbox("Selecione o ano para acompanhamento:", anos_disponiveis)
             
-            # Buscar orçamento do ano
-            orcamento_ano = df_budget[df_budget['ano'] == ano_selecionado]
-            
-            if orcamento_ano.empty:
-                st.warning(f"Nenhum orçamento encontrado para {ano_selecionado}")
+            if len(anos_disponiveis) == 0:
+                st.warning("Nenhum ano com orçamento válido encontrado.")
             else:
-                valor_orcado = orcamento_ano['valor'].iloc[0]
+                ano_selecionado = st.selectbox("Selecione o ano para acompanhamento:", anos_disponiveis)
                 
-                # Buscar gasto do ano
-                gasto_ano = df_gastos[df_gastos['ano'] == ano_selecionado]
-                valor_gasto = gasto_ano['gasto_total'].iloc[0] if not gasto_ano.empty else 0
+                # Buscar orçamento do ano
+                orcamento_ano = df_budget[df_budget['ano'] == ano_selecionado]
                 
-                # Calcular percentual
-                percentual_usado = (valor_gasto / valor_orcado * 100) if valor_orcado > 0 else 0
-                valor_restante = valor_orcado - valor_gasto
-                
-                # Métricas
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Orçamento Total", f"R$ {valor_orcado:,.2f}")
-                col2.metric("Gasto Atual", f"R$ {valor_gasto:,.2f}")
-                col3.metric("Disponível", f"R$ {valor_restante:,.2f}", 
-                           delta=f"{percentual_usado:.1f}% usado")
-                
-                # Determinar cor da métrica
-                if percentual_usado < 70:
-                    status_cor = "🟢"
-                elif percentual_usado < 90:
-                    status_cor = "🟡"
+                if orcamento_ano.empty:
+                    st.warning(f"Nenhum orçamento encontrado para {ano_selecionado}")
                 else:
-                    status_cor = "🔴"
+                    valor_orcado = float(orcamento_ano['valor'].iloc[0])
                     
-                col4.metric("Status", f"{status_cor} {percentual_usado:.1f}%")
-                
-                # Barra de progresso
-                st.markdown("### Progresso do Orçamento")
-                st.progress(min(percentual_usado / 100, 1.0))
-                
-                # Alerta se ultrapassar
-                if percentual_usado > 100:
-                    st.error(f"⚠️ ATENÇÃO: Orçamento ultrapassado em R$ {abs(valor_restante):,.2f}!")
-                elif percentual_usado > 90:
-                    st.warning(f"⚠️ Atenção: Restam apenas {100 - percentual_usado:.1f}% do orçamento!")
-                elif percentual_usado > 70:
-                    st.info(f"ℹ️ Você já utilizou {percentual_usado:.1f}% do orçamento anual.")
-                
-                # Gráfico de evolução mensal (se ano atual)
-                if ano_selecionado == datetime.now().year:
-                    st.markdown("### Evolução Mensal")
+                    # Buscar gasto do ano
+                    gasto_ano = df_gastos[df_gastos['ano'] == ano_selecionado]
+                    valor_gasto = float(gasto_ano['gasto_total'].iloc[0]) if not gasto_ano.empty else 0.0
                     
-                    stock_data = sheet_operations.carregar_dados()
-                    if stock_data and len(stock_data) > 1:
-                        df = pd.DataFrame(stock_data[1:], columns=stock_data[0])
-                        df['date'] = pd.to_datetime(df['date'], errors='coerce')
-                        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
-                        df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
-                        df['transaction_type'] = df['transaction_type'].str.lower().str.strip()
+                    # Calcular percentual
+                    percentual_usado = (valor_gasto / valor_orcado * 100) if valor_orcado > 0 else 0
+                    valor_restante = valor_orcado - valor_gasto
+                    
+                    # Métricas
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Orçamento Total", f"R$ {valor_orcado:,.2f}")
+                    col2.metric("Gasto Atual", f"R$ {valor_gasto:,.2f}")
+                    col3.metric("Disponível", f"R$ {valor_restante:,.2f}", 
+                               delta=f"{percentual_usado:.1f}% usado")
+                    
+                    # Determinar cor da métrica
+                    if percentual_usado < 70:
+                        status_cor = "🟢"
+                    elif percentual_usado < 90:
+                        status_cor = "🟡"
+                    else:
+                        status_cor = "🔴"
                         
-                        df_ano = df[(df['date'].dt.year == ano_selecionado) & (df['transaction_type'] == 'entrada')].copy()
-                        df_ano['mes'] = df_ano['date'].dt.month
-                        df_ano['valor_total'] = df_ano['quantity'] * df_ano['value']
+                    col4.metric("Status", f"{status_cor} {percentual_usado:.1f}%")
+                    
+                    # Barra de progresso
+                    st.markdown("### Progresso do Orçamento")
+                    st.progress(min(percentual_usado / 100, 1.0))
+                    
+                    # Alerta se ultrapassar
+                    if percentual_usado > 100:
+                        st.error(f"⚠️ ATENÇÃO: Orçamento ultrapassado em R$ {abs(valor_restante):,.2f}!")
+                    elif percentual_usado > 90:
+                        st.warning(f"⚠️ Atenção: Restam apenas {100 - percentual_usado:.1f}% do orçamento!")
+                    elif percentual_usado > 70:
+                        st.info(f"ℹ️ Você já utilizou {percentual_usado:.1f}% do orçamento anual.")
+                    
+                    # Gráfico de evolução mensal (se ano atual)
+                    if ano_selecionado == datetime.now().year:
+                        st.markdown("### Evolução Mensal")
                         
-                        gastos_mensais = df_ano.groupby('mes')['valor_total'].sum().reindex(range(1, 13), fill_value=0)
-                        gastos_acumulados = gastos_mensais.cumsum()
-                        
-                        chart_data = pd.DataFrame({
-                            'Mês': ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
-                            'Gasto Acumulado': gastos_acumulados.values,
-                            'Orçamento': [valor_orcado] * 12
-                        })
-                        
-                        st.line_chart(chart_data.set_index('Mês'))
+                        try:
+                            stock_data = sheet_operations.carregar_dados()
+                            if stock_data and len(stock_data) > 1:
+                                df = pd.DataFrame(stock_data[1:], columns=stock_data[0])
+                                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                                df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+                                df['value'] = df['value'].apply(lambda x: 0 if x == '' else float(str(x).replace('.', '').replace(',', '.')))
+                                df['transaction_type'] = df['transaction_type'].str.lower().str.strip()
+                                
+                                df_ano = df[(df['date'].dt.year == ano_selecionado) & (df['transaction_type'] == 'entrada')].copy()
+                                df_ano['mes'] = df_ano['date'].dt.month
+                                df_ano['valor_total'] = df_ano['quantity'] * df_ano['value']
+                                
+                                gastos_mensais = df_ano.groupby('mes')['valor_total'].sum().reindex(range(1, 13), fill_value=0)
+                                gastos_acumulados = gastos_mensais.cumsum()
+                                
+                                chart_data = pd.DataFrame({
+                                    'Mês': ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+                                    'Gasto Acumulado': gastos_acumulados.values,
+                                    'Orçamento': [valor_orcado] * 12
+                                })
+                                
+                                st.line_chart(chart_data.set_index('Mês'))
+                        except Exception as e:
+                            st.warning(f"Não foi possível gerar o gráfico mensal: {e}")
     
     with tab2:
         st.subheader("Gerenciar Orçamentos")
         
         # Adicionar novo orçamento
-        with st.expander("➕ Adicionar Novo Orçamento", expanded=False):
+        with st.expander("➕ Adicionar Novo Orçamento", expanded=True if df_budget.empty else False):
             col1, col2 = st.columns(2)
             with col1:
                 novo_ano = st.number_input("Ano:", min_value=2020, max_value=2050, 
@@ -206,49 +226,60 @@ def budget_management_page():
         # Editar orçamento existente
         if not df_budget.empty:
             with st.expander("✏️ Editar Orçamento Existente", expanded=False):
-                ids_disponiveis = df_budget['id'].tolist()
-                
                 # Criar dicionário para exibição mais amigável
-                display_dict = {f"{row['ano']} - R$ {row['valor']:,.2f} (ID: {row['id']})": row['id'] 
-                               for _, row in df_budget.iterrows()}
+                display_dict = {}
+                for _, row in df_budget.iterrows():
+                    try:
+                        ano_val = int(row['ano']) if pd.notna(row['ano']) else 0
+                        valor_val = float(row['valor']) if pd.notna(row['valor']) else 0.0
+                        id_val = row['id']
+                        display_dict[f"{ano_val} - R$ {valor_val:,.2f} (ID: {id_val})"] = id_val
+                    except:
+                        continue
                 
-                selected_display = st.selectbox("Selecione o orçamento:", list(display_dict.keys()))
-                selected_id = display_dict[selected_display]
-                
-                row = df_budget[df_budget['id'] == selected_id].iloc[0]
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    edit_ano = st.number_input("Ano:", min_value=2020, max_value=2050, 
-                                              value=int(row['ano']), key="edit_ano")
-                with col2:
-                    edit_valor = st.number_input("Valor Orçado (R$):", min_value=0.0, 
-                                                value=float(row['valor']), step=1000.0, 
-                                                format="%.2f", key="edit_valor")
-                
-                if st.button("Salvar Alterações", type="primary"):
-                    if sheet_operations.editar_budget(selected_id, int(edit_ano), float(edit_valor)):
-                        st.success("Orçamento atualizado com sucesso!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("Erro ao atualizar orçamento.")
+                if display_dict:
+                    selected_display = st.selectbox("Selecione o orçamento:", list(display_dict.keys()))
+                    selected_id = display_dict[selected_display]
+                    
+                    row = df_budget[df_budget['id'] == selected_id].iloc[0]
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        edit_ano = st.number_input("Ano:", min_value=2020, max_value=2050, 
+                                                  value=int(row['ano']), key="edit_ano")
+                    with col2:
+                        edit_valor = st.number_input("Valor Orçado (R$):", min_value=0.0, 
+                                                    value=float(row['valor']), step=1000.0, 
+                                                    format="%.2f", key="edit_valor")
+                    
+                    if st.button("Salvar Alterações", type="primary"):
+                        if sheet_operations.editar_budget(selected_id, int(edit_ano), float(edit_valor)):
+                            st.success("Orçamento atualizado com sucesso!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("Erro ao atualizar orçamento.")
+                else:
+                    st.info("Nenhum orçamento válido para editar.")
             
             # Excluir orçamento
             with st.expander("🗑️ Excluir Orçamento", expanded=False):
-                selected_display_del = st.selectbox("Selecione o orçamento para excluir:", 
-                                                   list(display_dict.keys()), key="del_select")
-                selected_id_del = display_dict[selected_display_del]
-                
-                st.warning("⚠️ Esta ação não pode ser desfeita!")
-                
-                if st.button("Confirmar Exclusão", type="primary"):
-                    if sheet_operations.excluir_budget(selected_id_del):
-                        st.success("Orçamento excluído com sucesso!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("Erro ao excluir orçamento.")
+                if display_dict:
+                    selected_display_del = st.selectbox("Selecione o orçamento para excluir:", 
+                                                       list(display_dict.keys()), key="del_select")
+                    selected_id_del = display_dict[selected_display_del]
+                    
+                    st.warning("⚠️ Esta ação não pode ser desfeita!")
+                    
+                    if st.button("Confirmar Exclusão", type="primary"):
+                        if sheet_operations.excluir_budget(selected_id_del):
+                            st.success("Orçamento excluído com sucesso!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("Erro ao excluir orçamento.")
+                else:
+                    st.info("Nenhum orçamento disponível para excluir.")
         
         # Exibir tabela de orçamentos
         st.markdown("---")
@@ -257,14 +288,15 @@ def budget_management_page():
             st.info("Nenhum orçamento cadastrado.")
         else:
             df_display = df_budget.sort_values('ano', ascending=False).copy()
-            df_display['valor'] = df_display['valor'].apply(lambda x: f"R$ {x:,.2f}")
-            st.dataframe(df_display[['ano', 'valor']], hide_index=True, use_container_width=True)
+            df_display['valor_formatado'] = df_display['valor'].apply(lambda x: f"R$ {x:,.2f}" if pd.notna(x) else "R$ 0,00")
+            st.dataframe(df_display[['ano', 'valor_formatado']].rename(columns={'valor_formatado': 'valor'}), 
+                        hide_index=True, use_container_width=True)
     
     with tab3:
         st.subheader("Análise Comparativa")
         
         if df_budget.empty or df_gastos.empty:
-            st.info("Dados insuficientes para análise comparativa.")
+            st.info("Dados insuficientes para análise comparativa. Adicione orçamentos e registre entradas de EPIs.")
         else:
             # Merge dos dados
             df_comparacao = pd.merge(df_budget, df_gastos, on='ano', how='left')
