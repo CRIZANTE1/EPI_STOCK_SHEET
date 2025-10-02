@@ -1,8 +1,8 @@
 import streamlit as st
 from Front.alerts_page import alerts_page
 
-def show():
+def page_alerts():
     alerts_page()
 
 if __name__ == "__main__":
-    show()
+    page_alerts()
