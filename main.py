@@ -9,8 +9,14 @@ from auth import (
     can_view
 )
 
-# Importar as funções show de cada página
-from pages import home, alerts, ficha, consulta_ca, ai_analysis, analytics, admin
+# Importar as funções das páginas
+from pages.home import page_home
+from pages.alerts import page_alerts
+from pages.ficha import page_ficha
+from pages.consulta_ca import page_consulta_ca
+from pages.ai_analysis import page_ai_analysis
+from pages.analytics import page_analytics
+from pages.admin import page_admin
 
 def main():
     """Função principal do aplicativo"""
@@ -29,23 +35,23 @@ def main():
     # Seção Principal - Todos usuários autenticados
     if can_view():
         pages["📋 Principal"] = [
-            st.Page(home.show, title="Controle de Estoque", icon="🏠"),
-            st.Page(alerts.show, title="Alertas de Troca", icon="🚨"),
+            st.Page(page_home, title="Controle de Estoque", icon="🏠", url_path="home"),
+            st.Page(page_alerts, title="Alertas de Troca", icon="🚨", url_path="alerts"),
         ]
     
     # Seção Gestão - Apenas Editores e Admins
     if can_edit():
         pages["📝 Gestão de EPIs"] = [
-            st.Page(ficha.show, title="Gerar Ficha de EPI", icon="📄"),
-            st.Page(consulta_ca.show, title="Consultar CA", icon="🔎"),
+            st.Page(page_ficha, title="Gerar Ficha de EPI", icon="📄", url_path="ficha"),
+            st.Page(page_consulta_ca, title="Consultar CA", icon="🔎", url_path="consulta-ca"),
         ]
     
     # Seção Administração - Apenas Admins
     if is_admin():
         pages["⚙️ Administração"] = [
-            st.Page(ai_analysis.show, title="Análise por IA", icon="🤖"),
-            st.Page(analytics.show, title="Análise de Utilização", icon="📊"),
-            st.Page(admin.show, title="Painel Administrativo", icon="⚙️"),
+            st.Page(page_ai_analysis, title="Análise por IA", icon="🤖", url_path="ai-analysis"),
+            st.Page(page_analytics, title="Análise de Utilização", icon="📊", url_path="analytics"),
+            st.Page(page_admin, title="Painel Administrativo", icon="⚙️", url_path="admin"),
         ]
     
     # Criar navegação
