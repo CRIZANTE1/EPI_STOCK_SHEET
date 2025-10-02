@@ -3,10 +3,12 @@ import pandas as pd
 import sys
 import os
 from datetime import datetime
+import plotly.graph_objects as go
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from End.Operations import SheetOperations
 from ML.demand_forecasting import DemandForecasting
+from ML.data_loader import DataLoader
 
 
 def ml_forecast_page():
@@ -23,21 +25,53 @@ def ml_forecast_page():
     - **Ensemble**: Combina as previsões de ambos os modelos para maior precisão
     """)
     
-    # Carregar dados
+    # Carregar dados usando o DataLoader
     sheet_operations = SheetOperations()
     
     @st.cache_data(ttl=300)
     def load_stock_data():
-        data = sheet_operations.carregar_dados()
-        if data and len(data) > 1:
-            return pd.DataFrame(data[1:], columns=data[0])
-        return pd.DataFrame()
+        loader = DataLoader(sheet_operations)
+        df = loader.load_data()
+        
+        # Mostrar relatório de qualidade
+        if not df.empty:
+            quality = loader.get_data_quality_report(df)
+            with st.expander("ℹ️ Qualidade dos Dados", expanded=False):
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Registros", quality['total_registros'])
+                col2.metric("EPIs Únicos", quality['epis_unicos'])
+                col3.metric("Período (dias)", 
+                           (pd.to_datetime(quality['periodo']['fim']) - 
+                            pd.to_datetime(quality['periodo']['inicio'])).days)
+        
+        return df
     
     df = load_stock_data()
     
     if df.empty:
         st.error("Não foi possível carregar os dados de estoque.")
+        st.info("Verifique se há registros na planilha e se as colunas estão corretas.")
         return
+    
+    # Diagnóstico de dados
+    with st.expander("🔧 Diagnóstico de Dados", expanded=False):
+        st.markdown("### Verificar Estrutura dos Dados")
+        
+        if st.button("Executar Diagnóstico"):
+            st.markdown("#### Primeiros 10 Registros")
+            st.dataframe(df.head(10))
+            
+            st.markdown("#### Tipos de Dados")
+            st.code(str(df.dtypes))
+            
+            st.markdown("#### Valores Únicos por Coluna")
+            for col in df.columns:
+                unique_count = df[col].nunique()
+                st.write(f"- **{col}**: {unique_count} valores únicos")
+            
+            st.markdown("#### Distribuição de Transações")
+            trans_dist = df['transaction_type'].value_counts()
+            st.bar_chart(trans_dist)
     
     # Inicializar modelo
     forecaster = DemandForecasting()
@@ -71,7 +105,6 @@ def ml_forecast_page():
         "📈 Análise de Sazonalidade",
         "🔍 Métricas dos Modelos",
         "⚡ Análise de Performance"
-        
     ])
     
     # TAB 1: PREVISÃO
@@ -254,8 +287,6 @@ def ml_forecast_page():
                     
                     criticas = len(recommendations[recommendations['prioridade'] == 'CRÍTICA'])
                     altas = len(recommendations[recommendations['prioridade'] == 'ALTA'])
-                    total_investimento = (recommendations['quantidade_recomendada'] * 
-                                         recommendations.get('preco_medio', 0)).sum()
                     
                     col1.metric("Compras Críticas", criticas, delta="Atenção!", delta_color="inverse")
                     col2.metric("Compras Alta Prioridade", altas)
@@ -298,13 +329,7 @@ def ml_forecast_page():
                                      'Média Diária', 'Qtd. Recomendada', 
                                      'Dias de Cobertura', 'Prioridade']],
                         hide_index=True,
-                        use_container_width=True,
-                        column_config={
-                            'Prioridade': st.column_config.TextColumn(
-                                'Prioridade',
-                                help='Nível de urgência da compra'
-                            )
-                        }
+                        use_container_width=True
                     )
                     
                     # Gráfico de priorização
@@ -555,9 +580,60 @@ def ml_forecast_page():
                 else:
                     st.error("Dados insuficientes para treinar os modelos. São necessários pelo menos 30 dias de histórico.")
         
-
-
-
+        # Informações adicionais sobre os modelos
+        with st.expander("ℹ️ Sobre os Modelos Utilizados"):
+            st.markdown("""
+            ### XGBoost (Extreme Gradient Boosting)
+            
+            **O que é:**
+            - Algoritmo de ensemble baseado em árvores de decisão
+            - Constrói múltiplas árvores sequencialmente, cada uma corrigindo erros da anterior
+            
+            **Vantagens:**
+            - Alta precisão em dados tabulares
+            - Captura relações não-lineares complexas
+            - Robusto contra overfitting
+            - Rápido para treinar e prever
+            
+            **Quando usar:**
+            - Dados com muitas features
+            - Padrões complexos
+            - Relações não-lineares
+            
+            ---
+            
+            ### Prophet (Facebook Prophet)
+            
+            **O que é:**
+            - Modelo especializado em séries temporais
+            - Desenvolvido pelo Facebook para análise de dados com sazonalidade
+            
+            **Vantagens:**
+            - Excelente para capturar sazonalidade (diária, semanal, anual)
+            - Robusto contra dados faltantes
+            - Fornece intervalos de confiança
+            - Fácil de interpretar
+            
+            **Quando usar:**
+            - Dados com forte componente sazonal
+            - Séries temporais com feriados/eventos especiais
+            - Necessidade de intervalos de confiança
+            
+            ---
+            
+            ### Ensemble (Combinação)
+            
+            **O que é:**
+            - Média ponderada das previsões de XGBoost e Prophet
+            
+            **Por que funciona:**
+            - XGBoost captura padrões complexos
+            - Prophet captura sazonalidade
+            - A combinação reduz o viés de cada modelo individual
+            - Geralmente mais preciso que modelos isolados
+            """)
+    
+    # TAB 5: ANÁLISE DE PERFORMANCE
     with tab5:
         st.subheader("⚡ Análise de Performance e Backtesting")
         
@@ -844,3 +920,6 @@ def ml_forecast_page():
     As previsões são atualizadas automaticamente conforme novos dados são registrados no sistema.
     """)
 
+
+if __name__ == "__main__":
+    ml_forecast_page()
