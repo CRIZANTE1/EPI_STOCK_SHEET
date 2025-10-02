@@ -1,8 +1,8 @@
 import streamlit as st
 from Front.ai_recommendations_page import ai_recommendations_page
 
-def show():
+def page_ai_analysis():
     ai_recommendations_page()
 
 if __name__ == "__main__":
-    show()
+    page_ai_analysis()
