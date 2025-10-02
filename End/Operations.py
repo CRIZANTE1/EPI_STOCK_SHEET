@@ -217,4 +217,92 @@ class SheetOperations:
         except Exception as e:
             logging.error(f"Erro ao remover usuário: {e}", exc_info=True)
             st.error(f"Erro ao remover usuário: {e}")
+
+    def ensure_budget_sheet_exists(self):
+        """Garante que a aba 'budget' existe com as colunas corretas"""
+        if not self.credentials or not self.my_archive_google_sheets:
+            return
+        try:
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            sheet_title = 'budget'
+            if sheet_title not in [sheet.title for sheet in archive.worksheets()]:
+                aba = archive.add_worksheet(sheet_title, rows=1, cols=3)
+                aba.update_row(1, ['id', 'ano', 'valor'])
+                logging.info(f"Aba '{sheet_title}' criada com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao verificar/criar a aba 'budget': {e}", exc_info=True)
+    
+    def carregar_dados_budget(self):
+        """Carrega os dados da aba 'budget'"""
+        return self.carregar_dados_aba('budget')
+    
+    def adc_budget(self, ano, valor):
+        """Adiciona um novo registro de orçamento"""
+        if not self.credentials or not self.my_archive_google_sheets:
+            return False
+        try:
+            self.ensure_budget_sheet_exists()
+            logging.info(f"Tentando adicionar orçamento: Ano {ano}, Valor {valor}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('budget')
             
+            # Gera ID único
+            existing_ids = [row[0] for row in aba.get_all_values()[1:]]
+            while True:
+                new_id = random.randint(1000, 9999)
+                if str(new_id) not in existing_ids:
+                    break
+            
+            new_data = [new_id, ano, valor]
+            aba.append_table(values=[new_data])
+            logging.info("Orçamento adicionado com sucesso.")
+            return True
+        except Exception as e:
+            logging.error(f"Erro ao adicionar orçamento: {e}", exc_info=True)
+            return False
+    
+    def editar_budget(self, id, ano, valor):
+        """Edita um registro de orçamento existente"""
+        if not self.credentials or not self.my_archive_google_sheets:
+            return False
+        try:
+            logging.info(f"Tentando editar orçamento ID {id}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('budget')
+            data = aba.get_all_values()
+            
+            for i, row in enumerate(data):
+                if row[0] == str(id):
+                    updated_row = [str(id), ano, valor]
+                    aba.update_row(i + 1, updated_row)
+                    logging.info("Orçamento editado com sucesso.")
+                    return True
+                    
+            logging.error(f"ID {id} não encontrado.")
+            return False
+        except Exception as e:
+            logging.error(f"Erro ao editar orçamento: {e}", exc_info=True)
+            return False
+    
+    def excluir_budget(self, id):
+        """Exclui um registro de orçamento"""
+        if not self.credentials or not self.my_archive_google_sheets:
+            return False
+        try:
+            logging.info(f"Tentando excluir orçamento ID {id}")
+            archive = self.credentials.open_by_url(self.my_archive_google_sheets)
+            aba = archive.worksheet_by_title('budget')
+            data = aba.get_all_values()
+            
+            for i, row in enumerate(data):
+                if row[0] == str(id):
+                    aba.delete_rows(i + 1)
+                    logging.info("Orçamento excluído com sucesso.")
+                    return True
+                    
+            logging.error(f"ID {id} não encontrado.")
+            return False
+        except Exception as e:
+            logging.error(f"Erro ao excluir orçamento: {e}", exc_info=True)
+            return False
+                
