@@ -56,7 +56,7 @@ def main():
     
     # Criar navegação
     if pages:
-        pg = st.navigation(pages, position="sidebar")
+        pg = st.navigation(pages, position="top")
         pg.run()
     else:
         st.error("Nenhuma página disponível para o seu nível de permissão.")
