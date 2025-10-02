@@ -65,7 +65,7 @@ def ml_forecast_page():
     st.markdown("---")
     
     # Tabs principais
-    tab1, tab2, tab3, tab4, TAB 5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Previsão de Demanda", 
         "🎯 Recomendações de Compra", 
         "📈 Análise de Sazonalidade",
